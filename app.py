@@ -110,6 +110,36 @@ st.markdown("""
         margin: 8px 0;
         border: 1px solid #e5e5e7;
     }
+    /* Decision card with button inside */
+    .decision-card-with-btn {
+        background: #f5f5f7;
+        padding: 14px 18px;
+        border-radius: 10px;
+        margin: 8px 0;
+        border: 1px solid #e5e5e7;
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        gap: 12px;
+    }
+    .decision-card-with-btn .content {
+        flex: 1;
+    }
+    .decision-card-with-btn .artifact-btn {
+        background: white;
+        border: 1px solid #d1d1d6;
+        color: #333;
+        font-size: 0.85rem;
+        padding: 6px 14px;
+        border-radius: 6px;
+        cursor: pointer;
+        white-space: nowrap;
+        flex-shrink: 0;
+    }
+    .decision-card-with-btn .artifact-btn:hover {
+        background: #f0f0f0;
+        border-color: #999;
+    }
     .blocker-card {
         background: #fef2f2;
         padding: 14px 18px;
@@ -561,7 +591,7 @@ def render_decisions_tab(loader):
     st.markdown(f"**{len(filtered)} decisions found**")
     
     # Display decisions
-    for decision in filtered:
+    for i, decision in enumerate(filtered):
         # Get meeting title if available
         meeting = loader.graph.get_meeting(decision.meeting_id) if decision.meeting_id else None
         meeting_title = meeting.title if meeting else decision.meeting_id or 'Unknown meeting'
@@ -572,13 +602,22 @@ def render_decisions_tab(loader):
         
         date_str = decision.timestamp.strftime('%Y-%m-%d') if decision.timestamp else 'Unknown'
         
-        st.markdown(f"""
-        <div class='decision-card'>
-            <strong>{decision.content}</strong><br/>
-            <small>{decision.rationale or ''}</small><br/>
-            <small style="color:#86868b">{made_by} · {date_str} · {meeting_title}</small>
-        </div>
-        """, unsafe_allow_html=True)
+        # Create card with View Artifact button inside using container
+        has_artifact = meeting and decision.meeting_id
+        
+        with st.container(border=True):
+            col1, col2 = st.columns([6, 1])
+            with col1:
+                st.markdown(f"**{decision.content}**")
+                if decision.rationale:
+                    st.caption(decision.rationale)
+                st.caption(f"{made_by} · {date_str} · {meeting_title}")
+            with col2:
+                if has_artifact:
+                    if st.button("→ Artifact", key=f"view_artifact_{decision.id}_{i}", help=f"View {meeting_title}"):
+                        st.session_state['selected_artifact_id'] = decision.meeting_id
+                        st.session_state['navigate_to_artifacts'] = True
+                        st.rerun()
 
 
 def render_actions_tab(loader):
@@ -618,7 +657,7 @@ def render_actions_tab(loader):
     st.markdown(f"**{len(filtered)} work orders found**")
     
     # Display actions
-    for action in filtered:
+    for i, action in enumerate(filtered):
         status = action.status.value if action.status else 'pending'
 
         # Get assignee name
@@ -627,13 +666,23 @@ def render_actions_tab(loader):
 
         due_date = action.due_date.strftime('%Y-%m-%d') if action.due_date else ''
         due_str = f" · Due {due_date}" if due_date else ""
+        
+        # Get meeting title if available
+        meeting = loader.graph.get_meeting(action.meeting_id) if action.meeting_id else None
+        meeting_title = meeting.title if meeting else action.meeting_id or 'Unknown'
+        has_artifact = meeting and action.meeting_id
 
-        st.markdown(f"""
-        <div class='action-card'>
-            <strong>{action.task}</strong><br/>
-            <small style="color:#86868b">{assignee}{due_str} · {status}</small>
-        </div>
-        """, unsafe_allow_html=True)
+        with st.container(border=True):
+            col1, col2 = st.columns([6, 1])
+            with col1:
+                st.markdown(f"**{action.task}**")
+                st.caption(f"{assignee}{due_str} · {status} · {meeting_title}")
+            with col2:
+                if has_artifact:
+                    if st.button("→ Artifact", key=f"wo_artifact_{action.id}_{i}", help=f"View {meeting_title}"):
+                        st.session_state['selected_artifact_id'] = action.meeting_id
+                        st.session_state['navigate_to_artifacts'] = True
+                        st.rerun()
 
 
 def render_meetings_tab(loader):
@@ -652,7 +701,18 @@ def render_meetings_tab(loader):
     # Artifact selector
     meeting_options = {f"{m.title} ({m.date.strftime('%Y-%m-%d') if m.date else 'Unknown'})": m.id
                        for m in all_meetings}
-    selected_title = st.selectbox("Select an artifact:", list(meeting_options.keys()))
+    
+    # Check if we should pre-select an artifact from navigation
+    default_index = 0
+    if 'selected_artifact_id' in st.session_state:
+        target_id = st.session_state.pop('selected_artifact_id', None)
+        if target_id:
+            for idx, (title, mid) in enumerate(meeting_options.items()):
+                if mid == target_id:
+                    default_index = idx
+                    break
+    
+    selected_title = st.selectbox("Select an artifact:", list(meeting_options.keys()), index=default_index)
     
     if selected_title:
         meeting_id = meeting_options[selected_title]
@@ -1134,6 +1194,26 @@ def main():
 
     # Render sidebar
     render_sidebar(loader, engine)
+
+    # Auto-navigate to Artifacts tab if requested
+    if st.session_state.get('navigate_to_artifacts'):
+        # Clear the flag immediately to prevent re-triggering
+        del st.session_state['navigate_to_artifacts']
+        # Inject JavaScript to click the Artifacts tab using components.html
+        import streamlit.components.v1 as components
+        components.html("""
+        <script>
+            // Use setTimeout to ensure DOM is fully ready
+            setTimeout(() => {
+                const tabs = window.parent.document.querySelectorAll('button[data-baseweb="tab"]');
+                tabs.forEach(tab => {
+                    if (tab.textContent.includes('Artifacts')) {
+                        tab.click();
+                    }
+                });
+            }, 100);
+        </script>
+        """, height=0)
 
     # Main content tabs - SDLC focused
     tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
