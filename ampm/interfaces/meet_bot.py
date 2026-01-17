@@ -34,6 +34,7 @@ except ImportError:
 from ..core.graph import MeetingGraph
 from ..core.query import QueryEngine
 from ..core.embeddings import EmbeddingStore
+from ..core.ripple import RippleDetector
 from ..ingest.loader import MeetingLoader
 
 # Configuration
@@ -92,6 +93,12 @@ class DemoMeetBot:
         )
         self.loader = MeetingLoader(self.graph, self.embeddings)
         self.query_engine = QueryEngine(self.graph, self.embeddings)
+        self.ripple_detector = RippleDetector(self.graph)
+
+        # Conversation context for follow-up questions
+        self.conversation_history = []
+        self.last_decision_context = None
+        self.last_query_result = None
 
         # Load meeting data
         if data_path:
@@ -209,21 +216,58 @@ class DemoMeetBot:
         await self._cleanup()
 
     async def _respond(self, question: str):
-        """Generate and speak response with timing."""
+        """Generate and speak response with timing, ripple detection, and follow-ups."""
         total_start = time.time()
 
-        # Query memory - use fast mode (Backboard RAG) if available
+        # Add to conversation history for context
+        self.conversation_history.append({"role": "user", "content": question})
+
+        # Check if this is a ripple/impact question
+        ripple_keywords = ["what if", "if we change", "impact of", "affects", "ripple", "downstream"]
+        is_ripple_query = any(kw in question.lower() for kw in ripple_keywords)
+
+        # Check if this is a follow-up question
+        follow_up_keywords = ["what about", "and what", "also", "related to that", "more about"]
+        is_follow_up = any(kw in question.lower() for kw in follow_up_keywords)
+
         print("Thinking...", end=" ", flush=True)
         llm_start = time.time()
 
-        if self.fast_mode:
-            result = self.query_engine.query_fast(question)
+        answer = ""
+
+        # Handle ripple detection queries
+        if is_ripple_query and self.graph._decisions:
+            answer = self._handle_ripple_query(question)
         else:
-            result = self.query_engine.query(question)
-        answer = result.answer
+            # Regular query with context
+            if is_follow_up and self.last_query_result:
+                # Add context from last query
+                context_question = f"Context: {self.last_query_result.answer[:200]}... Question: {question}"
+                if self.fast_mode:
+                    result = self.query_engine.query_fast(context_question)
+                else:
+                    result = self.query_engine.query(context_question)
+            else:
+                if self.fast_mode:
+                    result = self.query_engine.query_fast(question)
+                else:
+                    result = self.query_engine.query(question)
+
+            answer = result.answer
+            self.last_query_result = result
+
+            # Extract decision context for potential ripple follow-ups
+            if result.sources:
+                for source in result.sources:
+                    if source.get('source') == 'decision' or source.get('decision_content'):
+                        self.last_decision_context = source
+                        break
 
         llm_time = time.time() - llm_start
         print(f"({llm_time:.2f}s)")
+
+        # Add to history
+        self.conversation_history.append({"role": "assistant", "content": answer})
 
         print(f"\nAMPM: {answer}\n")
 
@@ -244,6 +288,69 @@ class DemoMeetBot:
 
         print(f"Done!")
         print(f"LLM: {llm_time:.2f}s | TTS: {tts_time:.2f}s | Total: {total_time:.2f}s\n")
+
+    def _handle_ripple_query(self, question: str) -> str:
+        """Handle ripple effect / impact analysis queries."""
+        question_lower = question.lower()
+
+        # Try to find a decision mentioned in the question
+        target_decision = None
+        for dec_id, dec in self.graph._decisions.items():
+            # Check if decision content keywords appear in question
+            dec_keywords = dec.content.lower().split()[:5]
+            if any(kw in question_lower for kw in dec_keywords if len(kw) > 3):
+                target_decision = dec
+                break
+
+        # Fall back to last decision context
+        if not target_decision and self.last_decision_context:
+            dec_id = self.last_decision_context.get('decision_id')
+            if dec_id:
+                target_decision = self.graph.get_decision(dec_id)
+
+        if not target_decision:
+            return "I need to know which decision you want to analyze. Could you specify which decision you're asking about?"
+
+        # Run ripple detection
+        new_value = "changed"  # Generic change
+        if "saml" in question_lower:
+            new_value = "Use SAML instead"
+        elif "change" in question_lower:
+            # Extract what they want to change to
+            parts = question_lower.split("change")
+            if len(parts) > 1:
+                new_value = parts[1].strip()[:50]
+
+        report = self.ripple_detector.detect(target_decision.id, new_value, target_decision.content)
+
+        # Format response
+        if report.total_affected == 0:
+            return f"Changing '{target_decision.content[:50]}...' appears safe. No downstream impacts detected."
+
+        response_parts = [
+            f"If we change '{target_decision.content[:40]}...', here's the impact:"
+        ]
+
+        # Group by type
+        work_orders = [i for i in report.impacts if i.type == "action_item"]
+        decisions = [i for i in report.impacts if i.type == "decision"]
+
+        if work_orders:
+            response_parts.append(f"{len(work_orders)} work orders affected:")
+            for wo in work_orders[:3]:
+                response_parts.append(f"  - {wo.title[:40]}")
+
+        if decisions:
+            response_parts.append(f"{len(decisions)} related decisions to review.")
+
+        if report.people_to_notify:
+            names = []
+            for pid in report.people_to_notify[:3]:
+                person = self.graph.get_person(pid)
+                names.append(person.name if person else pid)
+            response_parts.append(f"Notify: {', '.join(names)}")
+
+        return " ".join(response_parts)
 
     async def _cleanup(self):
         """Leave meeting."""
@@ -301,6 +408,13 @@ class MeetBot:
         )
         self.loader = MeetingLoader(self.graph, self.embeddings)
         self.query_engine = QueryEngine(self.graph, self.embeddings)
+        self.ripple_detector = RippleDetector(self.graph)
+        self.fast_mode = fast_mode and use_backboard
+
+        # Conversation context for follow-up questions
+        self.conversation_history = []
+        self.last_decision_context = None
+        self.last_query_result = None
 
         # Load meeting data
         if data_path:
@@ -851,23 +965,58 @@ class MeetBot:
         return False, ""
 
     async def _respond(self, question: str):
-        """Generate and speak response into the meeting."""
+        """Generate and speak response with ripple detection and follow-up support."""
         self.is_speaking = True
         print("Thinking...", end=" ", flush=True)
         start_time = time.time()
 
         try:
-            # Use fast mode (Backboard RAG) if available
-            if self.fast_mode:
-                result = self.query_engine.query_fast(question)
+            # Add to conversation history for context
+            self.conversation_history.append({"role": "user", "content": question})
+
+            # Check if this is a ripple/impact question
+            ripple_keywords = ["what if", "if we change", "impact of", "affects", "ripple", "downstream"]
+            is_ripple_query = any(kw in question.lower() for kw in ripple_keywords)
+
+            # Check if this is a follow-up question
+            follow_up_keywords = ["what about", "and what", "also", "related to that", "more about"]
+            is_follow_up = any(kw in question.lower() for kw in follow_up_keywords)
+
+            # Handle ripple detection queries
+            if is_ripple_query and self.graph._decisions:
+                answer = self._handle_ripple_query(question)
             else:
-                result = self.query_engine.query(question)
-            answer = result.answer
+                # Regular query with context
+                if is_follow_up and self.last_query_result:
+                    # Add context from last query
+                    context_question = f"Context: {self.last_query_result.answer[:200]}... Question: {question}"
+                    if self.fast_mode:
+                        result = self.query_engine.query_fast(context_question)
+                    else:
+                        result = self.query_engine.query(context_question)
+                else:
+                    if self.fast_mode:
+                        result = self.query_engine.query_fast(question)
+                    else:
+                        result = self.query_engine.query(question)
+
+                answer = result.answer
+                self.last_query_result = result
+
+                # Extract decision context for potential ripple follow-ups
+                if result.sources:
+                    for source in result.sources:
+                        if source.get('source') == 'decision' or source.get('decision_content'):
+                            self.last_decision_context = source
+                            break
+
+            # Add to history
+            self.conversation_history.append({"role": "assistant", "content": answer})
 
             llm_time = time.time() - start_time
             print(f"({llm_time:.2f}s)")
 
-            print(f"\Parrot: {answer}\n")
+            print(f"\nParrot: {answer}\n")
 
             print("Speaking into meeting...", end=" ", flush=True)
             tts_start = time.time()
@@ -930,6 +1079,69 @@ class MeetBot:
         finally:
             self.is_speaking = False
             print("Listening again...\n")
+
+    def _handle_ripple_query(self, question: str) -> str:
+        """Handle ripple effect / impact analysis queries."""
+        question_lower = question.lower()
+
+        # Try to find a decision mentioned in the question
+        target_decision = None
+        for dec_id, dec in self.graph._decisions.items():
+            # Check if decision content keywords appear in question
+            dec_keywords = dec.content.lower().split()[:5]
+            if any(kw in question_lower for kw in dec_keywords if len(kw) > 3):
+                target_decision = dec
+                break
+
+        # Fall back to last decision context
+        if not target_decision and self.last_decision_context:
+            dec_id = self.last_decision_context.get('decision_id')
+            if dec_id:
+                target_decision = self.graph.get_decision(dec_id)
+
+        if not target_decision:
+            return "I need to know which decision you want to analyze. Could you specify which decision you're asking about?"
+
+        # Run ripple detection
+        new_value = "changed"  # Generic change
+        if "saml" in question_lower:
+            new_value = "Use SAML instead"
+        elif "change" in question_lower:
+            # Extract what they want to change to
+            parts = question_lower.split("change")
+            if len(parts) > 1:
+                new_value = parts[1].strip()[:50]
+
+        report = self.ripple_detector.detect(target_decision.id, new_value, target_decision.content)
+
+        # Format response
+        if report.total_affected == 0:
+            return f"Changing '{target_decision.content[:50]}...' appears safe. No downstream impacts detected."
+
+        response_parts = [
+            f"If we change '{target_decision.content[:40]}...', here's the impact:"
+        ]
+
+        # Group by type
+        work_orders = [i for i in report.impacts if i.type == "action_item"]
+        decisions = [i for i in report.impacts if i.type == "decision"]
+
+        if work_orders:
+            response_parts.append(f"{len(work_orders)} work orders affected:")
+            for wo in work_orders[:3]:
+                response_parts.append(f"  - {wo.title[:40]}")
+
+        if decisions:
+            response_parts.append(f"{len(decisions)} related decisions to review.")
+
+        if report.people_to_notify:
+            names = []
+            for pid in report.people_to_notify[:3]:
+                person = self.graph.get_person(pid)
+                names.append(person.name if person else pid)
+            response_parts.append(f"Notify: {', '.join(names)}")
+
+        return " ".join(response_parts)
 
     async def _inject_audio_to_meeting(self, audio_bytes: bytes) -> float:
         """
