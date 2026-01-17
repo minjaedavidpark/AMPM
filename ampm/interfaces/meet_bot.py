@@ -48,25 +48,41 @@ class DemoMeetBot:
 
     Type questions in the terminal and the bot speaks the answer
     through your speakers into the meeting.
+
+    Uses Backboard API for persistent memory across sessions.
     """
 
-    def __init__(self, meeting_url: str, data_path: Optional[str] = None):
+    def __init__(
+        self,
+        meeting_url: str,
+        data_path: Optional[str] = None,
+        use_backboard: bool = True,
+        fast_mode: bool = True
+    ):
         """
         Initialize the demo meet bot.
 
         Args:
             meeting_url: Google Meet URL to join.
             data_path: Optional path to meeting data JSON file.
+            use_backboard: Use Backboard API for memory (default True).
+            fast_mode: Use Backboard's integrated RAG for faster responses (default True).
         """
         self.meeting_url = meeting_url
         self.elevenlabs = ElevenLabs(api_key=os.getenv("ELEVENLABS_API_KEY"))
         self.voice_id = os.getenv("ELEVENLABS_VOICE_ID", "21m00Tcm4TlvDq8ikWAM")
         self.browser = None
         self.page = None
+        self.fast_mode = fast_mode and use_backboard
 
-        # Initialize memory system
+        # Initialize memory system with persistence
+        config_dir = str(PROFILE_DIR.parent / ".ampm")
         self.graph = MeetingGraph()
-        self.embeddings = EmbeddingStore(use_backboard=True)
+        self.embeddings = EmbeddingStore(
+            use_backboard=use_backboard,
+            config_dir=config_dir,
+            persist=True
+        )
         self.loader = MeetingLoader(self.graph, self.embeddings)
         self.query_engine = QueryEngine(self.graph, self.embeddings)
 
@@ -77,7 +93,7 @@ class DemoMeetBot:
             try:
                 self.loader.load_sample_data()
             except FileNotFoundError:
-                print("Warning: No sample data found")
+                print("Note: No sample data found, using Backboard memory only")
 
     async def start(self):
         """Launch browser and join meeting."""
@@ -189,11 +205,14 @@ class DemoMeetBot:
         """Generate and speak response with timing."""
         total_start = time.time()
 
-        # Query memory
+        # Query memory - use fast mode (Backboard RAG) if available
         print("Thinking...", end=" ", flush=True)
         llm_start = time.time()
 
-        result = self.query_engine.query(question)
+        if self.fast_mode:
+            result = self.query_engine.query_fast(question)
+        else:
+            result = self.query_engine.query(question)
         answer = result.answer
 
         llm_time = time.time() - llm_start
@@ -233,15 +252,25 @@ class MeetBot:
 
     Listens to meeting audio and responds when wake word is detected.
     Requires virtual audio routing (e.g., BlackHole on macOS).
+
+    Uses Backboard API for persistent memory across sessions.
     """
 
-    def __init__(self, meeting_url: str, data_path: Optional[str] = None):
+    def __init__(
+        self,
+        meeting_url: str,
+        data_path: Optional[str] = None,
+        use_backboard: bool = True,
+        fast_mode: bool = True
+    ):
         """
         Initialize the live meet bot.
 
         Args:
             meeting_url: Google Meet URL to join.
             data_path: Optional path to meeting data JSON file.
+            use_backboard: Use Backboard API for memory (default True).
+            fast_mode: Use Backboard's integrated RAG for faster responses (default True).
         """
         self.meeting_url = meeting_url
         self.openai = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
@@ -251,10 +280,16 @@ class MeetBot:
         self.page = None
         self.is_listening = True
         self.is_speaking = False
+        self.fast_mode = fast_mode and use_backboard
 
-        # Initialize memory system
+        # Initialize memory system with persistence
+        config_dir = str(PROFILE_DIR.parent / ".ampm")
         self.graph = MeetingGraph()
-        self.embeddings = EmbeddingStore(use_backboard=True)
+        self.embeddings = EmbeddingStore(
+            use_backboard=use_backboard,
+            config_dir=config_dir,
+            persist=True
+        )
         self.loader = MeetingLoader(self.graph, self.embeddings)
         self.query_engine = QueryEngine(self.graph, self.embeddings)
 
@@ -265,7 +300,7 @@ class MeetBot:
             try:
                 self.loader.load_sample_data()
             except FileNotFoundError:
-                print("Warning: No sample data found")
+                print("Note: No sample data found, using Backboard memory only")
 
     async def start(self):
         """Launch browser and join meeting."""
@@ -456,7 +491,11 @@ class MeetBot:
         start_time = time.time()
 
         try:
-            result = self.query_engine.query(question)
+            # Use fast mode (Backboard RAG) if available
+            if self.fast_mode:
+                result = self.query_engine.query_fast(question)
+            else:
+                result = self.query_engine.query(question)
             answer = result.answer
 
             llm_time = time.time() - start_time

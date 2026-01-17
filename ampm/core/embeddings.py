@@ -60,8 +60,16 @@ class EmbeddingStore:
     DEFAULT_ASSISTANT_NAME = "AMPM-Meeting-Memory"
     DEFAULT_LLM_PROVIDER = "cerebras"
     DEFAULT_MODEL = "meta-llama/llama-3.3-70b-instruct"
+    DEFAULT_CONFIG_DIR = ".ampm"
+    CONFIG_FILENAME = "backboard_state.json"
 
-    def __init__(self, use_backboard: bool = True, assistant_id: Optional[str] = None):
+    def __init__(
+        self,
+        use_backboard: bool = True,
+        assistant_id: Optional[str] = None,
+        config_dir: Optional[str] = None,
+        persist: bool = True
+    ):
         """
         Initialize the embedding store.
 
@@ -69,10 +77,19 @@ class EmbeddingStore:
             use_backboard: Whether to use Backboard API (default True)
             assistant_id: Optional Backboard assistant ID. If not provided,
                          will create or find one named AMPM-Meeting-Memory.
+            config_dir: Directory to store persistent state (default .ampm)
+            persist: Whether to persist thread_id across sessions (default True)
         """
         self.use_backboard = use_backboard
         self.backboard_api_key = os.getenv("BACKBOARD_API_KEY")
         self.backboard_base_url = "https://app.backboard.io/api"
+        self.persist = persist
+
+        # Config directory for persistence
+        if config_dir:
+            self.config_dir = config_dir
+        else:
+            self.config_dir = os.path.join(os.getcwd(), self.DEFAULT_CONFIG_DIR)
 
         # Backboard state
         self.assistant_id = assistant_id
@@ -135,14 +152,84 @@ class EmbeddingStore:
             return None
 
     def _init_backboard(self):
-        """Initialize Backboard assistant and thread."""
+        """Initialize Backboard assistant and thread with persistence."""
+        # Try to load persisted state
+        if self.persist:
+            self._load_state()
+
+        # Get or create assistant
         if not self.assistant_id:
             self.assistant_id = self._get_or_create_assistant()
 
-        if self.assistant_id:
+        # Validate existing thread or create new one
+        if self.thread_id:
+            if self._validate_thread():
+                print(f"EmbeddingStore: Restored thread {self.thread_id[:8]}...")
+            else:
+                print(f"EmbeddingStore: Thread expired, creating new one")
+                self.thread_id = None
+
+        if self.assistant_id and not self.thread_id:
             self.thread_id = self._create_thread()
             if self.thread_id:
                 print(f"EmbeddingStore: Thread {self.thread_id[:8]}... ready")
+                if self.persist:
+                    self._save_state()
+
+    def _validate_thread(self) -> bool:
+        """Check if the persisted thread still exists."""
+        if not self.thread_id:
+            return False
+
+        result = self._backboard_request("GET", f"/threads/{self.thread_id}")
+        return result is not None and "thread_id" in result
+
+    def _get_config_path(self) -> str:
+        """Get the full path to the config file."""
+        return os.path.join(self.config_dir, self.CONFIG_FILENAME)
+
+    def _save_state(self) -> bool:
+        """Save assistant_id and thread_id to disk."""
+        try:
+            os.makedirs(self.config_dir, exist_ok=True)
+            state = {
+                "assistant_id": self.assistant_id,
+                "thread_id": self.thread_id,
+                "assistant_name": self.DEFAULT_ASSISTANT_NAME
+            }
+            with open(self._get_config_path(), 'w') as f:
+                json.dump(state, f, indent=2)
+            return True
+        except Exception as e:
+            print(f"Warning: Could not save state: {e}")
+            return False
+
+    def _load_state(self) -> bool:
+        """Load assistant_id and thread_id from disk."""
+        try:
+            config_path = self._get_config_path()
+            if not os.path.exists(config_path):
+                return False
+
+            with open(config_path, 'r') as f:
+                state = json.load(f)
+
+            # Only restore if same assistant name
+            if state.get("assistant_name") == self.DEFAULT_ASSISTANT_NAME:
+                self.assistant_id = state.get("assistant_id")
+                self.thread_id = state.get("thread_id")
+                return True
+            return False
+        except Exception as e:
+            print(f"Warning: Could not load state: {e}")
+            return False
+
+    def reset_thread(self) -> Optional[str]:
+        """Create a new thread, discarding the old one."""
+        self.thread_id = self._create_thread()
+        if self.thread_id and self.persist:
+            self._save_state()
+        return self.thread_id
 
     def _get_or_create_assistant(self) -> Optional[str]:
         """Get existing assistant or create a new one."""
