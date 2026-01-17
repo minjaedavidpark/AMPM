@@ -123,6 +123,16 @@ Thumbs.db
 # Streamlit
 .streamlit/
 
-# Local data (keep sample data)
+# Browser profile (Playwright persistent context)
+.browser_profile/
+
+# Demo folder (development only)
+demo/
+
+# Audio files
+*.wav
+*.mp3
+
+# Local data
 data/meetings/*.json
 !data/meetings/.gitkeep

@@ -1,0 +1,115 @@
+{
+  "project": "ShopFlow E-commerce Platform",
+  "team": {
+    "Sarah": "Product Manager",
+    "Mike": "CTO",
+    "Bob": "Engineering Lead",
+    "Alice": "Design Lead"
+  },
+  "meetings": [
+    {
+      "id": "meeting_001",
+      "title": "Sprint Planning - Payment Integration",
+      "date": "2026-05-01",
+      "attendees": ["Sarah", "Mike", "Bob", "Alice"],
+      "decisions": [
+        {
+          "id": "decision_001",
+          "topic": "Payment Provider Selection",
+          "decision": "Use Stripe over Braintree for payment processing",
+          "reasoning": "Better fraud detection, cleaner API, 2 weeks faster integration time",
+          "made_by": "Mike",
+          "confirmed_by": "Sarah",
+          "quote": "Stripe's API is significantly cleaner. We'll save about 2 weeks on integration alone."
+        },
+        {
+          "id": "decision_002",
+          "topic": "Checkout Implementation",
+          "decision": "Use Stripe's hosted checkout instead of custom checkout",
+          "reasoning": "Faster to implement, PCI compliance handled by Stripe, better conversion rates",
+          "made_by": "Mike",
+          "confirmed_by": "Sarah",
+          "quote": "Hosted checkout handles PCI for us. That's weeks of security work we don't have to do."
+        }
+      ],
+      "action_items": [
+        {
+          "id": "action_001",
+          "task": "Get Legal approval for Stripe integration",
+          "assigned_to": "Bob",
+          "due_date": "2026-05-04",
+          "estimated_days": 3,
+          "status": "completed"
+        }
+      ]
+    },
+    {
+      "id": "meeting_002",
+      "title": "Daily Standup",
+      "date": "2026-05-02",
+      "attendees": ["Sarah", "Bob", "Alice"],
+      "updates": [
+        {
+          "person": "Bob",
+          "update": "Meeting with Legal tomorrow morning to discuss Stripe contract terms"
+        }
+      ]
+    },
+    {
+      "id": "meeting_003",
+      "title": "Daily Standup",
+      "date": "2026-05-04",
+      "attendees": ["Sarah", "Bob", "Alice"],
+      "blockers": [
+        {
+          "id": "blocker_001",
+          "description": "Legal pushed meeting to next week - they're swamped with another project",
+          "reported_by": "Bob",
+          "impact": "Payment integration blocked until Legal approval",
+          "resolution_action": "Sarah to escalate to Legal director"
+        }
+      ]
+    },
+    {
+      "id": "meeting_004",
+      "title": "Leadership Sync",
+      "date": "2026-05-08",
+      "attendees": ["Sarah", "Mike", "Linda (Legal Director)"],
+      "decisions": [
+        {
+          "id": "decision_003",
+          "topic": "Stripe Legal Approval",
+          "decision": "Approved Stripe integration with standard vendor terms",
+          "made_by": "Linda",
+          "quote": "Standard terms are fine. I've reviewed Stripe's security posture - they're solid."
+        }
+      ],
+      "learnings": [
+        {
+          "lesson": "Book Legal reviews 2 weeks in advance",
+          "context": "Legal approval took 8 days instead of expected 3 days"
+        }
+      ]
+    },
+    {
+      "id": "meeting_005",
+      "title": "Daily Standup",
+      "date": "2026-05-09",
+      "attendees": ["Sarah", "Bob", "Alice"],
+      "updates": [
+        {
+          "person": "Bob",
+          "update": "Legal approved! Starting Stripe integration today. Should have basic checkout working by EOW."
+        }
+      ]
+    }
+  ],
+  "summary": {
+    "total_meetings": 5,
+    "decisions_made": 3,
+    "action_items": 1,
+    "blockers_resolved": 1,
+    "timeline": "May 1-9, 2026",
+    "key_outcome": "Stripe payment integration approved and implementation started"
+  }
+}

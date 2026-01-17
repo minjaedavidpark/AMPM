@@ -1,0 +1,27 @@
+# AMPM - AI Meeting Product Manager
+# ==================================
+
+# Audio I/O
+sounddevice>=0.4.6
+numpy>=1.26.0
+
+# Speech-to-Text (OpenAI Whisper)
+openai>=1.0.0
+
+# Fast LLM Inference (Cerebras)
+cerebras-cloud-sdk>=1.0.0
+
+# Text-to-Speech (ElevenLabs)
+elevenlabs>=1.0.0
+
+# Audio playback
+pydub>=0.25.0
+
+# Environment variables
+python-dotenv>=1.0.0
+
+# Async support
+websockets>=12.0
+
+# Browser automation (for Google Meet)
+playwright>=1.40.0
