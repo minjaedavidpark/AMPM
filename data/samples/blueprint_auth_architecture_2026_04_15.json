@@ -1,0 +1,46 @@
+{
+  "meeting_id": "blueprint_auth_architecture",
+  "title": "Blueprint: Authentication Architecture",
+  "date": "2026-04-15",
+  "duration_minutes": 0,
+  "participants": ["Mike Thompson (CTO)", "Bob Martinez (Eng Lead)", "Carlos Rivera (Infrastructure)"],
+  "decisions": [
+    {
+      "id": "dec_passportjs",
+      "decision": "Use Passport.js for OAuth implementation",
+      "made_by": "Bob Martinez",
+      "topic": "authentication",
+      "reasoning": "Passport.js is the de-facto standard for Node.js authentication. It has mature OAuth strategies for Google and GitHub, good documentation, and active maintenance."
+    },
+    {
+      "id": "dec_redis_cluster",
+      "decision": "Use Redis Cluster with 3 nodes for session storage",
+      "made_by": "Carlos Rivera",
+      "topic": "infrastructure",
+      "reasoning": "Provides high availability and handles our projected 10,000 concurrent sessions. Supports automatic failover."
+    },
+    {
+      "id": "dec_jwt_tokens",
+      "decision": "Use JWT tokens with 1-hour expiry for API authentication",
+      "made_by": "Mike Thompson",
+      "topic": "authentication",
+      "reasoning": "Short-lived tokens reduce security risk. Refresh tokens handle re-authentication without user friction."
+    }
+  ],
+  "action_items": [
+    {
+      "id": "action_setup_passport",
+      "task": "Set up Passport.js OAuth infrastructure with Google and GitHub strategies",
+      "assigned_to": "Bob Martinez",
+      "status": "pending"
+    },
+    {
+      "id": "action_redis_cluster",
+      "task": "Deploy Redis cluster for session storage",
+      "assigned_to": "Carlos Rivera",
+      "status": "completed"
+    }
+  ],
+  "blockers": [],
+  "transcript": "Blueprint: Authentication Architecture\nVersion: 1.0\nAuthor: Bob Martinez\nApproved by: Mike Thompson\n\nThis blueprint implements PRD: User Authentication System.\n\n## Architecture Overview\n\nThe authentication system consists of three main components:\n1. Auth Service - handles OAuth flows and token management\n2. Session Store - Redis cluster for session data\n3. User Service - manages user profiles and credentials\n\n## OAuth Flow\n\n1. User clicks 'Login with Google'\n2. Redirect to Google OAuth consent screen\n3. Google redirects back with authorization code\n4. Auth Service exchanges code for tokens\n5. Create session in Redis\n6. Return session cookie to client"
+}

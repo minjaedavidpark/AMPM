@@ -1,0 +1,61 @@
+{
+  "meeting_id": "workorders_auth",
+  "title": "Work Orders: Authentication Implementation",
+  "date": "2026-04-20",
+  "duration_minutes": 0,
+  "participants": ["Bob Martinez (Eng Lead)", "Alice Kim (Frontend)", "Diana Lee (Backend)", "Carlos Rivera (Infrastructure)"],
+  "decisions": [],
+  "action_items": [
+    {
+      "id": "wo_001_passport_setup",
+      "task": "WO-001: Set up Passport.js OAuth infrastructure",
+      "assigned_to": "Bob Martinez",
+      "status": "in_progress",
+      "decision_id": "dec_oauth_over_saml"
+    },
+    {
+      "id": "wo_002_google_oauth",
+      "task": "WO-002: Implement Google OAuth endpoint (/auth/google)",
+      "assigned_to": "Diana Lee",
+      "status": "pending",
+      "decision_id": "dec_oauth_over_saml"
+    },
+    {
+      "id": "wo_003_github_oauth",
+      "task": "WO-003: Implement GitHub OAuth endpoint (/auth/github)",
+      "assigned_to": "Diana Lee",
+      "status": "pending",
+      "decision_id": "dec_oauth_over_saml"
+    },
+    {
+      "id": "wo_004_callback_handler",
+      "task": "WO-004: Create OAuth callback handler (/auth/callback)",
+      "assigned_to": "Bob Martinez",
+      "status": "pending",
+      "decision_id": "dec_oauth_over_saml"
+    },
+    {
+      "id": "wo_005_redis_sessions",
+      "task": "WO-005: Set up Redis session store with ioredis",
+      "assigned_to": "Carlos Rivera",
+      "status": "completed",
+      "decision_id": "dec_redis_sessions"
+    },
+    {
+      "id": "wo_006_login_ui",
+      "task": "WO-006: Build login UI with Google and GitHub OAuth buttons",
+      "assigned_to": "Alice Kim",
+      "status": "in_progress",
+      "decision_id": "dec_oauth_over_saml"
+    }
+  ],
+  "blockers": [
+    {
+      "id": "blocker_google_credentials",
+      "description": "Waiting for Google Cloud OAuth credentials from IT",
+      "reported_by": "Bob Martinez",
+      "impact": "Blocks WO-001 completion and all dependent OAuth work orders"
+    }
+  ],
+  "transcript": "Work Orders for Authentication Implementation\nSprint: 12\nEpic: User Authentication\n\nThese work orders implement the Authentication Architecture Blueprint. All OAuth work orders depend on the OAuth 2.0 decision from the PRD.\n\nNote: If the OAuth requirement changes to SAML, work orders WO-001 through WO-004 and WO-006 will need to be completely rewritten."
+}

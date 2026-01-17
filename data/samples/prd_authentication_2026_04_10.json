@@ -1,0 +1,26 @@
+{
+  "meeting_id": "prd_authentication",
+  "title": "PRD: User Authentication System",
+  "date": "2026-04-10",
+  "duration_minutes": 0,
+  "participants": ["Sarah Chen (VP Product)", "Mike Thompson (CTO)"],
+  "decisions": [
+    {
+      "id": "dec_oauth_over_saml",
+      "decision": "Use OAuth 2.0 for authentication instead of SAML",
+      "made_by": "Mike Thompson",
+      "topic": "authentication",
+      "reasoning": "OAuth is simpler to implement for MVP. SAML adds enterprise complexity we don't need yet. Our target customers are startups, not enterprise."
+    },
+    {
+      "id": "dec_redis_sessions",
+      "decision": "Use Redis for session storage with 24-hour expiration",
+      "made_by": "Mike Thompson",
+      "topic": "authentication",
+      "reasoning": "Redis provides fast read/write for session data and supports automatic expiration."
+    }
+  ],
+  "action_items": [],
+  "blockers": [],
+  "transcript": "PRD: User Authentication System\nVersion: 1.0\nAuthor: Sarah Chen\nDate: April 10, 2026\n\n## Overview\nShopFlow needs a secure authentication system for our e-commerce platform.\n\n## Requirements\n\n### REQ-AUTH-001: Authentication Method\nThe system shall use OAuth 2.0 for user authentication.\n\n### REQ-AUTH-002: Session Management\nUser sessions shall be stored in Redis with a 24-hour expiration.\n\n### REQ-AUTH-003: Social Login\nThe system shall support Google and GitHub as OAuth providers."
+}

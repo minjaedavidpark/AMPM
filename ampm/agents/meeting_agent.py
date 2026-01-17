@@ -279,6 +279,7 @@ class MeetingAgent:
             task=data.get("task", ""),
             assigned_to=assigned_to_id,
             meeting_id=meeting_id,
+            decision_id=data.get("decision_id"),  # Link to parent decision
             due_date=due_date,
             status=status,
             estimated_days=data.get("estimated_days")

@@ -97,12 +97,12 @@ class RippleDetector:
 
         change_description = f"Change: '{old_value}' → '{new_value}'"
 
-        # Get all downstream nodes
-        downstream_ids = self.graph.get_downstream(decision_id, depth=3)
+        # Get all dependent nodes (action items that follow from this decision)
+        dependent_ids = self._get_dependent_nodes(decision_id)
 
-        # Analyze each downstream node for impact
+        # Analyze each dependent node for impact
         impacts = self._analyze_impacts(
-            downstream_ids,
+            dependent_ids,
             old_value,
             new_value
         )
@@ -123,6 +123,30 @@ class RippleDetector:
             suggestions=suggestions,
             analysis_time_ms=analysis_time_ms
         )
+
+    def _get_dependent_nodes(self, decision_id: str) -> list[str]:
+        """
+        Get all nodes that depend on a decision.
+
+        This includes:
+        - Action items that follow from this decision
+        - Other decisions with the same topic
+        """
+        dependent_ids = []
+
+        # Find action items that depend on this decision
+        for action_id, action in self.graph._action_items.items():
+            if action.decision_id == decision_id:
+                dependent_ids.append(action_id)
+
+        # Find related decisions (same topic)
+        decision = self.graph.get_decision(decision_id)
+        if decision and decision.topic:
+            for other_id, other_dec in self.graph._decisions.items():
+                if other_id != decision_id and other_dec.topic == decision.topic:
+                    dependent_ids.append(other_id)
+
+        return dependent_ids
 
     def _analyze_impacts(self, node_ids: list[str],
                          old_value: str, new_value: str) -> list[Impact]:

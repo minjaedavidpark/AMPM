@@ -1,0 +1,33 @@
+{
+  "meeting_id": "architecture_review_auth",
+  "title": "Architecture Review: Authentication Approach",
+  "date": "2026-04-12",
+  "duration_minutes": 45,
+  "participants": ["Mike Thompson (CTO)", "Bob Martinez (Eng Lead)", "Sarah Chen (VP Product)", "Carlos Rivera (Infrastructure)"],
+  "decisions": [
+    {
+      "id": "dec_oauth_decision",
+      "decision": "Use OAuth 2.0 for authentication instead of SAML",
+      "made_by": "Mike Thompson",
+      "topic": "authentication",
+      "reasoning": "OAuth is faster to implement for our MVP timeline. It provides better developer experience which matters for our startup customers. We can always add SAML later if we get enterprise demand.",
+      "quote": "I'm recommending OAuth 2.0. OAuth is faster to implement for our MVP timeline."
+    }
+  ],
+  "action_items": [
+    {
+      "id": "action_create_blueprint",
+      "task": "Create Authentication Architecture Blueprint",
+      "assigned_to": "Bob Martinez",
+      "due_date": "2026-04-15"
+    },
+    {
+      "id": "action_setup_redis",
+      "task": "Set up Redis cluster for session storage",
+      "assigned_to": "Carlos Rivera",
+      "due_date": "2026-04-14"
+    }
+  ],
+  "blockers": [],
+  "transcript": "Mike: Thanks everyone for joining. Today we need to make a final call on the authentication approach for ShopFlow. We've been going back and forth between OAuth and SAML.\n\nSarah: From a product perspective, our target customers are startups and mid-market companies. Most of them are using Google Workspace or GitHub.\n\nBob: That points toward OAuth. The developer experience with OAuth is much better. SAML is designed for enterprise SSO scenarios.\n\nCarlos: From an infrastructure standpoint, OAuth is simpler to deploy. SAML requires setting up an identity provider and dealing with certificates.\n\nMike: I'm recommending OAuth 2.0. OAuth is faster to implement for our MVP timeline. It provides better developer experience which matters for our startup customers. We can always add SAML later if we get enterprise demand.\n\nSarah: I'm aligned. Let's document this clearly.\n\nBob: I'll update the PRD and start on the technical blueprint.\n\nMike: Perfect. Bob, have the blueprint ready by end of week. Carlos, set up the Redis cluster.\n\nCarlos: Will do, should take about a day."
+}
