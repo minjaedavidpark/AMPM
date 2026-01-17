@@ -25,7 +25,11 @@ if [ -f ".env" ]; then
 fi
 
 echo "Starting AMPM Web Application..."
+echo ""
+echo "Note: First run may take 1-2 minutes to load meetings and extract entities."
+echo "      Subsequent runs use cached data and load instantly."
+echo ""
 echo "Open http://localhost:8501 in your browser"
 echo ""
 
-streamlit run app.py
+streamlit run app.py --server.headless true
