@@ -10,14 +10,13 @@ Usage:
 Say "Hey AMPM" followed by your question.
 """
 
-import os
 import sys
 
 # Load environment variables
 from dotenv import load_dotenv
 load_dotenv()
 
-from ampm import AMPMBot
+from ampm import VoiceBot
 
 
 def main():
@@ -39,7 +38,7 @@ def main():
     """)
 
     try:
-        bot = AMPMBot()
+        bot = VoiceBot()
         bot.run()
     except ValueError as e:
         print(f"\nConfiguration Error: {e}")

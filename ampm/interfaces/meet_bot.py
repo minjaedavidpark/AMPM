@@ -1,6 +1,6 @@
 """
-AMPM Google Meet Bot
-====================
+Google Meet Bot Interface
+=========================
 Bot that joins Google Meet and responds to questions.
 
 Two modes:
@@ -22,19 +22,21 @@ from playwright.async_api import async_playwright
 import sounddevice as sd
 import numpy as np
 from openai import OpenAI
-from cerebras.cloud.sdk import Cerebras
 from elevenlabs import ElevenLabs
 from elevenlabs.play import play
 
-from .knowledge import MeetingKnowledge
+from ..core.graph import MeetingGraph
+from ..core.query import QueryEngine
+from ..core.embeddings import EmbeddingStore
+from ..ingest.loader import MeetingLoader
 
 # Configuration
 SAMPLE_RATE = 16000
 CHANNELS = 1
 RECORD_SECONDS = 6
 
-# Browser profile directory (relative to package)
-PROFILE_DIR = Path(__file__).parent.parent / ".browser_profile"
+# Browser profile directory
+PROFILE_DIR = Path(__file__).parent.parent.parent / ".browser_profile"
 
 # Wake words
 WAKE_WORDS = ["hey ampm", "ampm,", "ampm ", "hey am pm", "hey amp", "a]mpm"]
@@ -48,21 +50,34 @@ class DemoMeetBot:
     through your speakers into the meeting.
     """
 
-    def __init__(self, meeting_url: str, knowledge_path: Optional[str] = None):
+    def __init__(self, meeting_url: str, data_path: Optional[str] = None):
         """
         Initialize the demo meet bot.
 
         Args:
             meeting_url: Google Meet URL to join.
-            knowledge_path: Optional path to meeting data JSON file.
+            data_path: Optional path to meeting data JSON file.
         """
         self.meeting_url = meeting_url
-        self.cerebras = Cerebras(api_key=os.getenv("CEREBRAS_API_KEY"))
         self.elevenlabs = ElevenLabs(api_key=os.getenv("ELEVENLABS_API_KEY"))
-        self.knowledge = MeetingKnowledge(knowledge_path)
         self.voice_id = os.getenv("ELEVENLABS_VOICE_ID", "21m00Tcm4TlvDq8ikWAM")
         self.browser = None
         self.page = None
+
+        # Initialize memory system
+        self.graph = MeetingGraph()
+        self.embeddings = EmbeddingStore(use_backboard=True)
+        self.loader = MeetingLoader(self.graph, self.embeddings)
+        self.query_engine = QueryEngine(self.graph, self.embeddings)
+
+        # Load meeting data
+        if data_path:
+            self.loader.load_file(data_path)
+        else:
+            try:
+                self.loader.load_sample_data()
+            except FileNotFoundError:
+                print("Warning: No sample data found")
 
     async def start(self):
         """Launch browser and join meeting."""
@@ -172,28 +187,14 @@ class DemoMeetBot:
         """Generate and speak response with timing."""
         total_start = time.time()
 
-        # LLM
+        # Query memory
         print("Thinking...", end=" ", flush=True)
         llm_start = time.time()
 
-        context = self.knowledge.get_context()
-        response = self.cerebras.chat.completions.create(
-            model="llama-3.3-70b",
-            messages=[
-                {
-                    "role": "system",
-                    "content": "You are AMPM, an AI meeting assistant. Be concise (2-3 sentences). Cite dates and people."
-                },
-                {
-                    "role": "user",
-                    "content": f"Question: {question}\n\nMeeting History:\n{context}"
-                }
-            ],
-            max_tokens=150
-        )
+        result = self.query_engine.query(question)
+        answer = result.answer
 
         llm_time = time.time() - llm_start
-        answer = response.choices[0].message.content
         print(f"({llm_time:.2f}s)")
 
         print(f"\nAMPM: {answer}\n")
@@ -232,24 +233,37 @@ class MeetBot:
     Requires virtual audio routing (e.g., BlackHole on macOS).
     """
 
-    def __init__(self, meeting_url: str, knowledge_path: Optional[str] = None):
+    def __init__(self, meeting_url: str, data_path: Optional[str] = None):
         """
         Initialize the live meet bot.
 
         Args:
             meeting_url: Google Meet URL to join.
-            knowledge_path: Optional path to meeting data JSON file.
+            data_path: Optional path to meeting data JSON file.
         """
         self.meeting_url = meeting_url
         self.openai = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-        self.cerebras = Cerebras(api_key=os.getenv("CEREBRAS_API_KEY"))
         self.elevenlabs = ElevenLabs(api_key=os.getenv("ELEVENLABS_API_KEY"))
-        self.knowledge = MeetingKnowledge(knowledge_path)
         self.voice_id = os.getenv("ELEVENLABS_VOICE_ID", "21m00Tcm4TlvDq8ikWAM")
         self.browser = None
         self.page = None
         self.is_listening = True
         self.is_speaking = False
+
+        # Initialize memory system
+        self.graph = MeetingGraph()
+        self.embeddings = EmbeddingStore(use_backboard=True)
+        self.loader = MeetingLoader(self.graph, self.embeddings)
+        self.query_engine = QueryEngine(self.graph, self.embeddings)
+
+        # Load meeting data
+        if data_path:
+            self.loader.load_file(data_path)
+        else:
+            try:
+                self.loader.load_sample_data()
+            except FileNotFoundError:
+                print("Warning: No sample data found")
 
     async def start(self):
         """Launch browser and join meeting."""
@@ -434,30 +448,16 @@ class MeetBot:
     async def _respond(self, question: str):
         """Generate and speak response."""
         self.is_speaking = True
-        print("Thinking (Cerebras)...", end=" ", flush=True)
+        print("Thinking...", end=" ", flush=True)
         start_time = time.time()
 
         try:
-            context = self.knowledge.get_context()
-            response = self.cerebras.chat.completions.create(
-                model="llama-3.3-70b",
-                messages=[
-                    {
-                        "role": "system",
-                        "content": "You are AMPM, an AI meeting assistant. Be concise (2-3 sentences). Cite dates and people."
-                    },
-                    {
-                        "role": "user",
-                        "content": f"Question: {question}\n\nMeeting History:\n{context}"
-                    }
-                ],
-                max_tokens=150
-            )
+            result = self.query_engine.query(question)
+            answer = result.answer
 
             llm_time = time.time() - start_time
             print(f"({llm_time:.2f}s)")
 
-            answer = response.choices[0].message.content
             print(f"\nAMPM: {answer}\n")
 
             print("Speaking...", end=" ", flush=True)

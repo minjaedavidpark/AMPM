@@ -1,6 +1,9 @@
 # AMPM - AI Meeting Product Manager
 # ==================================
 
+# Core
+networkx>=3.0            # Knowledge graph
+
 # Audio I/O
 sounddevice>=0.4.6
 numpy>=1.26.0
@@ -19,6 +22,9 @@ pydub>=0.25.0
 
 # Environment variables
 python-dotenv>=1.0.0
+
+# HTTP requests (for Backboard API)
+requests>=2.31.0
 
 # Async support
 websockets>=12.0

@@ -1,9 +1,9 @@
 """
-AMPM Bot - Local Audio Version
-==============================
-Voice-activated AI assistant using microphone and speakers.
+Voice Bot Interface
+===================
+Local voice bot using microphone and speakers.
 
-Flow: Microphone -> OpenAI Whisper -> Cerebras LLM -> ElevenLabs TTS -> Speaker
+Flow: Microphone → OpenAI Whisper → Memory Query → ElevenLabs TTS → Speaker
 """
 
 import os
@@ -11,16 +11,18 @@ import io
 import time
 import tempfile
 import wave
-from typing import Tuple, Optional
+from typing import Optional, Tuple
 
 import sounddevice as sd
 import numpy as np
 from openai import OpenAI
-from cerebras.cloud.sdk import Cerebras
 from elevenlabs import ElevenLabs
 from elevenlabs.play import play
 
-from .knowledge import MeetingKnowledge
+from ..core.graph import MeetingGraph
+from ..core.query import QueryEngine
+from ..core.embeddings import EmbeddingStore
+from ..ingest.loader import MeetingLoader
 
 # Configuration
 SAMPLE_RATE = 16000
@@ -31,25 +33,40 @@ RECORD_SECONDS = 5
 WAKE_WORDS = ["hey ampm", "ampm,", "ampm ", "hey am pm", "hey a]mpm", "hey amp", "a]mpm"]
 
 
-class AMPMBot:
-    """Main bot class that orchestrates STT, LLM, and TTS."""
+class VoiceBot:
+    """
+    Voice-activated bot for querying meeting memory.
 
-    def __init__(self, knowledge_path: Optional[str] = None):
+    Say "Hey AMPM" followed by your question.
+    """
+
+    def __init__(self, data_path: Optional[str] = None):
         """
-        Initialize the AMPM bot.
+        Initialize the voice bot.
 
         Args:
-            knowledge_path: Optional path to meeting data JSON file.
+            data_path: Optional path to meeting data JSON file.
         """
         self._validate_keys()
 
         # Initialize API clients
         self.openai = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-        self.cerebras = Cerebras(api_key=os.getenv("CEREBRAS_API_KEY"))
         self.elevenlabs = ElevenLabs(api_key=os.getenv("ELEVENLABS_API_KEY"))
 
-        # Load knowledge base
-        self.knowledge = MeetingKnowledge(knowledge_path)
+        # Initialize memory system
+        self.graph = MeetingGraph()
+        self.embeddings = EmbeddingStore(use_backboard=True)
+        self.loader = MeetingLoader(self.graph, self.embeddings)
+        self.query_engine = QueryEngine(self.graph, self.embeddings)
+
+        # Load meeting data
+        if data_path:
+            self.loader.load_file(data_path)
+        else:
+            try:
+                self.loader.load_sample_data()
+            except FileNotFoundError:
+                print("Warning: No sample data found")
 
         # State
         self.is_speaking = False
@@ -57,8 +74,9 @@ class AMPMBot:
         # Voice settings
         self.voice_id = os.getenv("ELEVENLABS_VOICE_ID", "21m00Tcm4TlvDq8ikWAM")
 
-        print(f"AMPM Bot initialized with Cerebras (fast inference)")
-        print(f"Loaded {self.knowledge.meeting_count} meetings from {self.knowledge.project_name}")
+        stats = self.graph.stats
+        print(f"VoiceBot initialized")
+        print(f"Loaded: {stats['meetings']} meetings, {stats['decisions']} decisions")
 
     def _validate_keys(self):
         """Check that all required API keys are present."""
@@ -130,46 +148,17 @@ class AMPMBot:
 
         return False, ""
 
-    def _generate_response(self, question: str) -> str:
-        """Use Cerebras for fast response generation."""
-        print("Thinking (Cerebras)...", end=" ", flush=True)
+    def _query(self, question: str) -> str:
+        """Query the meeting memory."""
+        print("Thinking...", end=" ", flush=True)
         start_time = time.time()
 
-        context = self.knowledge.get_context()
-
-        system_prompt = """You are AMPM, an AI meeting assistant that helps teams remember decisions and track action items.
-
-Your role:
-- Answer questions about past meetings, decisions, and action items
-- Be concise and direct (2-3 sentences max for spoken responses)
-- Always cite the specific meeting date and who made the decision
-- If you don't know, say so clearly
-
-Important: Your response will be spoken aloud, so keep it conversational and brief."""
-
-        user_prompt = f"""Based on the following meeting history, answer this question:
-
-Question: {question}
-
-Meeting History:
-{context}
-
-Remember: Keep your answer brief (2-3 sentences) as it will be spoken aloud."""
-
-        response = self.cerebras.chat.completions.create(
-            model="llama-3.3-70b",
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt}
-            ],
-            max_tokens=200,
-            temperature=0.7
-        )
+        result = self.query_engine.query(question)
 
         elapsed = time.time() - start_time
         print(f"({elapsed:.2f}s)")
 
-        return response.choices[0].message.content
+        return result.answer
 
     def _speak(self, text: str):
         """Convert text to speech and play it."""
@@ -199,7 +188,7 @@ Remember: Keep your answer brief (2-3 sentences) as it will be spoken aloud."""
         Returns:
             The response text.
         """
-        return self._generate_response(question)
+        return self._query(question)
 
     def ask_and_speak(self, question: str) -> str:
         """
@@ -211,14 +200,14 @@ Remember: Keep your answer brief (2-3 sentences) as it will be spoken aloud."""
         Returns:
             The response text.
         """
-        response = self._generate_response(question)
+        response = self._query(question)
         self._speak(response)
         return response
 
     def run(self):
         """Main run loop - record, transcribe, respond."""
         print("\n" + "=" * 50)
-        print("AMPM Meeting Bot - Ready!")
+        print("AMPM Voice Bot - Ready!")
         print("=" * 50)
         print("\nSay 'Hey AMPM' followed by your question.")
         print("Examples:")
@@ -244,7 +233,7 @@ Remember: Keep your answer brief (2-3 sentences) as it will be spoken aloud."""
 
                 if detected:
                     print(f"Question: \"{question}\"")
-                    response = self._generate_response(question)
+                    response = self._query(question)
                     self._speak(response)
                 else:
                     print("(No wake word detected. Say 'Hey AMPM' followed by your question)\n")
