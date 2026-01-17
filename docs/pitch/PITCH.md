@@ -371,6 +371,38 @@ Navigate to the action item tracker, search for "Legal"
 
 ---
 
+## The Future Vision (If Asked)
+
+### "What's Next for AMPM?"
+
+> "Right now, AMPM analyzes meetings after they happen. But we're building something more ambitious:
+>
+> **AMPM as a real-time meeting participant.**
+>
+> Imagine you're in a meeting. Someone asks: 'Why did we delay internationalization again?'
+>
+> AMPM hears the question, queries the knowledge graph in under 2 seconds, and **responds with audio right there in the meeting**:
+>
+> *'That decision was made April 15th in Q2 Planning. Sarah decided to validate US product-market fit first because internationalization would take 6 weeks you couldn't afford at the time.'*
+>
+> No one has to stop the meeting. No one has to dig through notes. AMPM becomes the team's institutional memory—actively participating, not just recording.
+>
+> That's where we're headed. Post-meeting analysis is Phase 1. Real-time participation is the endgame."
+
+**Technical feasibility:**
+- Streaming STT (Deepgram: 100-200ms latency)
+- Wake word detection ("Hey AMPM")
+- Your existing query engine (<2s)
+- TTS response (ElevenLabs: ~500ms)
+- **Total: <3 seconds** - fast enough to feel conversational
+
+**Why it matters:**
+- Removes friction from knowledge access
+- Works during the meeting, not after
+- Every meeting becomes smarter because the AI remembers everything
+
+---
+
 **Go win this.**
 
 **From AM to PM, never miss a decision.**

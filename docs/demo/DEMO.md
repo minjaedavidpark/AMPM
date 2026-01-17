@@ -260,6 +260,45 @@ Practice to hit 2:45-3:00, leaving buffer for any delays.
 
 ---
 
+## Optional: Real-Time Vision Demo (If Time Permits)
+
+**Purpose:** Show judges where AMPM is headed - real-time meeting participation
+
+**Setup (Pre-recorded or Live Test):**
+1. Have AMPM "join" a mock meeting (screen share)
+2. Someone asks: "Hey AMPM, why did we choose Stripe?"
+3. Show AMPM responding with audio in <3 seconds
+4. Play the TTS response through speakers
+
+**Script:**
+> "One more thing I want to show you. This is what we're building next.
+>
+> *[Switch to real-time demo window]*
+>
+> AMPM is now joining this meeting as a participant. Watch what happens when someone asks a question during the meeting.
+>
+> *[Play pre-recorded or have teammate ask live]*
+>
+> Teammate: 'Hey AMPM, why did we choose Stripe for payments?'
+>
+> *[AMPM responds with audio in ~2 seconds]*
+>
+> AMPM: 'Based on the Sprint Planning meeting on May 1st, Mike recommended Stripe over Braintree because of better fraud detection, a cleaner API, and faster integration time—saving about 2 weeks of development.'
+>
+> *[Pause for effect]*
+>
+> That just happened in real-time. AMPM heard the question, queried the knowledge graph, and responded—all while the meeting is happening.
+>
+> This is the future we're building: an AI teammate that remembers every decision and can answer questions the moment they're asked."
+
+**Alternative (If Real-Time Demo Not Ready):**
+- Show architecture diagram with real-time flow
+- Walk through latency budget (2.2 seconds total)
+- Explain technical approach (Deepgram STT, your query engine, ElevenLabs TTS)
+- Position as "Phase 2, already architected"
+
+---
+
 ## Final Prep Checklist
 
 ### Technical
@@ -267,12 +306,15 @@ Practice to hit 2:45-3:00, leaving buffer for any delays.
 - [ ] Both demo queries tested
 - [ ] Response times verified (<3s)
 - [ ] Backup screenshots ready
+- [ ] (Optional) Real-time demo tested
+- [ ] (Optional) TTS audio working
 
 ### Presentation
 - [ ] Opening memorized
 - [ ] Key lines memorized
 - [ ] Transitions smooth
 - [ ] Closing strong
+- [ ] (Optional) Real-time vision pitch ready
 
 ### Team
 - [ ] Who presents vs who runs demo
@@ -287,9 +329,11 @@ Practice to hit 2:45-3:00, leaving buffer for any delays.
 - Lead with the PROBLEM (decisions disappear)
 - Show, don't tell (demo immediately)
 - Emphasize SPEED (say the times out loud)
-- End with VISION (from AM to PM)
+- End with VISION (from AM to PM - and future real-time participation)
 
 **The action item timeline is your money shot.** When judges see an 8-day blocker story reconstructed from 4 meetings in 2.3 seconds--that's the "whoa" moment.
+
+**If you show the real-time vision:** That's your closer. The moment judges realize AMPM can answer questions **during** the meeting, not just after—that's when they see the full potential.
 
 **You've got this.**
 
