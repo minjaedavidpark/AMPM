@@ -203,7 +203,7 @@ class QueryEngine:
         # Format context for prompt
         context_text = self._format_context(context)
 
-        system_prompt = """You are AMPM, an AI meeting assistant that helps teams remember decisions and track action items.
+        system_prompt = """You are Parrot, an AI meeting assistant that helps teams remember decisions and track action items.
 
 Your role:
 - Answer questions about past meetings, decisions, and action items
