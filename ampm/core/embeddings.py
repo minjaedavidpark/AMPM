@@ -6,13 +6,14 @@ Semantic search across meeting content using vector embeddings.
 Integrates with Backboard API for:
 - Document storage and indexing
 - Automatic vector embeddings
-- RAG-based retrieval
-- Persistent memory
+- RAG-based retrieval (via threads with memory=Auto)
+- Persistent memory across sessions
 
-Falls back to local FAISS for offline use.
+Falls back to local OpenAI embeddings for offline use.
 """
 
 import os
+import json
 from typing import Optional
 from dataclasses import dataclass
 
@@ -46,27 +47,45 @@ class EmbeddingStore:
     """
     Vector embedding store for semantic search.
 
-    Primary: Backboard API (managed service)
+    Primary: Backboard API (managed service with persistent memory)
     Fallback: Local OpenAI embeddings + in-memory search
+
+    Backboard Integration:
+    - Uses assistants/threads model for conversation memory
+    - Memory is automatically stored and retrieved
+    - Supports Cerebras for fast inference
     """
 
-    def __init__(self, use_backboard: bool = True):
+    # Default assistant and model configuration
+    DEFAULT_ASSISTANT_NAME = "AMPM-Meeting-Memory"
+    DEFAULT_LLM_PROVIDER = "cerebras"
+    DEFAULT_MODEL = "meta-llama/llama-3.3-70b-instruct"
+
+    def __init__(self, use_backboard: bool = True, assistant_id: Optional[str] = None):
         """
         Initialize the embedding store.
 
         Args:
             use_backboard: Whether to use Backboard API (default True)
+            assistant_id: Optional Backboard assistant ID. If not provided,
+                         will create or find one named AMPM-Meeting-Memory.
         """
         self.use_backboard = use_backboard
         self.backboard_api_key = os.getenv("BACKBOARD_API_KEY")
-        self.backboard_base_url = "https://api.backboard.io"
+        self.backboard_base_url = "https://app.backboard.io/api"
+
+        # Backboard state
+        self.assistant_id = assistant_id
+        self.thread_id: Optional[str] = None
 
         # Local fallback
         self._documents: list[dict] = []
         self._embeddings: list[list[float]] = []
+        self._openai = None
 
         if use_backboard and self.backboard_api_key:
             print("EmbeddingStore: Using Backboard API")
+            self._init_backboard()
         elif LOCAL_AVAILABLE:
             print("EmbeddingStore: Using local embeddings")
             self._openai = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
@@ -75,66 +94,197 @@ class EmbeddingStore:
 
     # ==================== Backboard API ====================
 
-    def _backboard_request(self, method: str, endpoint: str, **kwargs) -> Optional[dict]:
-        """Make a request to Backboard API."""
+    def _backboard_request(
+        self, method: str, endpoint: str,
+        json_data: Optional[dict] = None,
+        form_data: Optional[dict] = None
+    ) -> Optional[dict]:
+        """
+        Make a request to Backboard API.
+
+        Args:
+            method: HTTP method (GET, POST, etc.)
+            endpoint: API endpoint (e.g., /assistants)
+            json_data: JSON body (for application/json requests)
+            form_data: Form data (for multipart/form-data requests)
+        """
         if not REQUESTS_AVAILABLE or not self.backboard_api_key:
             return None
 
-        headers = {
-            "Authorization": f"Bearer {self.backboard_api_key}",
-            "Content-Type": "application/json"
-        }
-
+        headers = {"X-API-Key": self.backboard_api_key}
         url = f"{self.backboard_base_url}{endpoint}"
 
         try:
-            response = requests.request(method, url, headers=headers, **kwargs)
-            if response.status_code == 200:
+            if form_data:
+                # Multipart form data (for messages endpoint)
+                response = requests.request(method, url, headers=headers, data=form_data)
+            elif json_data is not None:
+                # JSON body (even if empty dict)
+                headers["Content-Type"] = "application/json"
+                response = requests.request(method, url, headers=headers, json=json_data)
+            else:
+                response = requests.request(method, url, headers=headers)
+
+            if response.status_code in (200, 201):
                 return response.json()
             else:
-                print(f"Backboard API error: {response.status_code}")
+                print(f"Backboard API error: {response.status_code} - {response.text}")
                 return None
         except Exception as e:
             print(f"Backboard API error: {e}")
             return None
 
-    def add_to_backboard(self, doc_id: str, content: str, metadata: dict) -> bool:
-        """Add a document to Backboard for indexing."""
+    def _init_backboard(self):
+        """Initialize Backboard assistant and thread."""
+        if not self.assistant_id:
+            self.assistant_id = self._get_or_create_assistant()
+
+        if self.assistant_id:
+            self.thread_id = self._create_thread()
+            if self.thread_id:
+                print(f"EmbeddingStore: Thread {self.thread_id[:8]}... ready")
+
+    def _get_or_create_assistant(self) -> Optional[str]:
+        """Get existing assistant or create a new one."""
+        # List existing assistants
+        result = self._backboard_request("GET", "/assistants")
+        # API returns a list directly
+        assistants = result if isinstance(result, list) else result.get("assistants", []) if result else []
+        for assistant in assistants:
+            if assistant.get("name") == self.DEFAULT_ASSISTANT_NAME:
+                print(f"EmbeddingStore: Found existing assistant")
+                return assistant.get("assistant_id") or assistant.get("id")
+
+        # Create new assistant
+        result = self._backboard_request("POST", "/assistants", json_data={
+            "name": self.DEFAULT_ASSISTANT_NAME,
+            "description": "AMPM Meeting Memory - stores and retrieves meeting decisions",
+            "llm_provider": self.DEFAULT_LLM_PROVIDER,
+            "model": self.DEFAULT_MODEL
+        })
+        if result:
+            assistant_id = result.get("assistant_id") or result.get("id")
+            if assistant_id:
+                print(f"EmbeddingStore: Created new assistant")
+                return assistant_id
+
+        return None
+
+    def _create_thread(self) -> Optional[str]:
+        """Create a new conversation thread."""
+        if not self.assistant_id:
+            return None
+
         result = self._backboard_request(
             "POST",
-            "/v1/documents",
-            json={
-                "id": doc_id,
-                "content": content,
-                "metadata": metadata
+            f"/assistants/{self.assistant_id}/threads",
+            json_data={}
+        )
+        if result and "thread_id" in result:
+            return result["thread_id"]
+        return None
+
+    def add_to_backboard(self, doc_id: str, content: str, metadata: dict) -> bool:
+        """
+        Add a document to Backboard memory.
+
+        Stores the content as a message with send_to_llm=false so it's
+        saved to memory without generating a response.
+        """
+        if not self.thread_id:
+            return False
+
+        # Format content with metadata for better retrieval
+        formatted_content = f"[{metadata.get('source', 'document')}:{doc_id}] {content}"
+
+        result = self._backboard_request(
+            "POST",
+            f"/threads/{self.thread_id}/messages",
+            form_data={
+                "content": formatted_content,
+                "send_to_llm": "false",
+                "memory": "Auto",
+                "metadata": json.dumps(metadata)
             }
         )
-        return result is not None
+        return result is not None and result.get("status") == "COMPLETED"
 
     def search_backboard(self, query: str, top_k: int = 5) -> list[SearchResult]:
-        """Search documents via Backboard RAG."""
+        """
+        Search documents via Backboard's memory-augmented RAG.
+
+        Sends a query and uses the retrieved_memories from the response.
+        """
+        if not self.thread_id:
+            return []
+
         result = self._backboard_request(
             "POST",
-            "/v1/search",
-            json={
-                "query": query,
-                "top_k": top_k
+            f"/threads/{self.thread_id}/messages",
+            form_data={
+                "content": f"Search for: {query}",
+                "llm_provider": self.DEFAULT_LLM_PROVIDER,
+                "model_name": self.DEFAULT_MODEL,
+                "memory": "Readonly",  # Search only, don't store this query
+                "send_to_llm": "false"  # Just retrieve memories, no LLM response
             }
         )
 
         if not result:
             return []
 
+        # Extract retrieved memories
+        memories = result.get("retrieved_memories") or []
         return [
             SearchResult(
-                id=r.get("id", ""),
-                content=r.get("content", ""),
-                score=r.get("score", 0.0),
-                metadata=r.get("metadata", {}),
-                source=r.get("metadata", {}).get("source", "unknown")
+                id=m.get("id", ""),
+                content=m.get("memory", ""),
+                score=m.get("score", 0.0),
+                metadata={},
+                source="backboard_memory"
             )
-            for r in result.get("results", [])
+            for m in memories[:top_k]
         ]
+
+    def query_with_context(self, query: str) -> tuple[str, list[SearchResult]]:
+        """
+        Query Backboard with full RAG: retrieves memories and generates response.
+
+        Returns:
+            Tuple of (answer, retrieved_memories)
+        """
+        if not self.thread_id:
+            return ("", [])
+
+        result = self._backboard_request(
+            "POST",
+            f"/threads/{self.thread_id}/messages",
+            form_data={
+                "content": query,
+                "llm_provider": self.DEFAULT_LLM_PROVIDER,
+                "model_name": self.DEFAULT_MODEL,
+                "memory": "Auto"
+            }
+        )
+
+        if not result:
+            return ("", [])
+
+        answer = result.get("content", "")
+        memories = result.get("retrieved_memories") or []
+
+        search_results = [
+            SearchResult(
+                id=m.get("id", ""),
+                content=m.get("memory", ""),
+                score=m.get("score", 0.0),
+                metadata={},
+                source="backboard_memory"
+            )
+            for m in memories
+        ]
+
+        return (answer, search_results)
 
     # ==================== Local Fallback ====================
 

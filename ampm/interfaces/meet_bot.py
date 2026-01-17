@@ -108,7 +108,7 @@ class DemoMeetBot:
     async def _ensure_google_login(self):
         """Check Google login."""
         print("\nChecking Google login...")
-        await self.page.goto("https://accounts.google.com")
+        await self.page.goto("https://accounts.google.com", wait_until="domcontentloaded", timeout=60000)
         await asyncio.sleep(2)
 
         url = self.page.url
@@ -121,7 +121,9 @@ class DemoMeetBot:
     async def _join_meeting(self):
         """Join the meeting."""
         print(f"\nOpening meeting...")
-        await self.page.goto(self.meeting_url)
+        # Use domcontentloaded instead of load - faster and more reliable for SPAs
+        # Increase timeout to 60 seconds for slow connections
+        await self.page.goto(self.meeting_url, wait_until="domcontentloaded", timeout=60000)
         await asyncio.sleep(4)
 
         # Turn off camera/mic
@@ -298,7 +300,7 @@ class MeetBot:
     async def _ensure_google_login(self):
         """Check Google login status."""
         print("\nChecking Google login...")
-        await self.page.goto("https://accounts.google.com")
+        await self.page.goto("https://accounts.google.com", wait_until="domcontentloaded", timeout=60000)
         await asyncio.sleep(2)
 
         url = self.page.url
@@ -315,7 +317,9 @@ class MeetBot:
     async def _join_meeting(self):
         """Navigate to meeting and handle join flow."""
         print(f"\nOpening meeting: {self.meeting_url}")
-        await self.page.goto(self.meeting_url)
+        # Use domcontentloaded instead of load - faster and more reliable for SPAs
+        # Increase timeout to 60 seconds for slow connections
+        await self.page.goto(self.meeting_url, wait_until="domcontentloaded", timeout=60000)
         await asyncio.sleep(4)
 
         # Turn off camera
