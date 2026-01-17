@@ -455,14 +455,23 @@ def render_ask_tab(engine: QueryEngine):
                     rationale = source.get('rationale', '')
                     content = source.get('content', '')
 
-                    # Pick best summary, skip if it's just the meeting title
+                    # Pick best summary, skip if it duplicates the meeting title
                     summary = ''
                     for text in [decision, rationale, content]:
-                        if text and text != meeting_title and len(text) > 20:
-                            summary = text[:150].strip()
-                            if len(text) > 150:
-                                summary += '...'
-                            break
+                        if not text or len(text) < 20:
+                            continue
+                        # Skip if text is just the meeting title or starts with it
+                        if text == meeting_title:
+                            continue
+                        # Strip meeting title from beginning if present
+                        if text.startswith(meeting_title):
+                            text = text[len(meeting_title):].lstrip(' \n\t:.-')
+                        if len(text) < 20:
+                            continue
+                        summary = text[:150].strip()
+                        if len(text) > 150:
+                            summary += '...'
+                        break
 
                     # Build clean card
                     date_html = f'<span style="color:#86868b;font-size:0.85rem"> · {date}</span>' if date else ''
