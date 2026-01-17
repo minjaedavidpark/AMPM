@@ -1,9 +1,11 @@
-# AMPM - Pitch
+# AMPM - Pitch Guide
+### Everything You Need to Win
+
 ---
 
 ## The One-Liner (Memorize This)
 
-**"From AM to PM, AMPM is your AI product manager that remembers every decision and tracks every action item--automatically."**
+**"AMPM gives your SDLC a brain. Ask why something exists--get an answer in 2 seconds. Change a requirement--see every downstream impact instantly."**
 
 ---
 
@@ -13,17 +15,21 @@
 
 *[Start with eye contact, speak slowly]*
 
-> "Let me tell you about something that happened to every PM in this room.
+> "Let me tell you about something that happened to every engineer in this room.
 >
-> You're in a stakeholder meeting. Someone asks: 'Why did we delay internationalization?'
+> You pick up a task. It says 'Implement rate limiting on the auth endpoint.'
 >
-> You know the answer is somewhere. Was it Q2 planning? The stakeholder sync? Maybe the CTO mentioned it in that leadership review three weeks ago?
+> You think: Why? Why auth specifically? What threshold? What incident caused this?
 >
-> So you start digging. Meeting transcripts. Slack threads. Your own notes--which are incomplete.
+> The ticket doesn't say. The spec just says 'add rate limiting.' The PRD mentions 'security concerns.' Nothing specific.
 >
-> An hour later, you still don't have the full picture. So you wing it. You hope you're right.
+> So you search Slack. 47 results. You ping the PM. They're in meetings. You check the wiki. It's outdated.
 >
-> Next week: 'That's not what we discussed.'"
+> An hour later, you still don't have context. So you guess. You build something. You hope it's right.
+>
+> Two weeks later: 'This doesn't match what we discussed.'
+>
+> What discussion? That context never reached you."
 
 *[Pause for effect]*
 
@@ -31,83 +37,83 @@
 
 ### The Problem: Named (15 seconds)
 
-> "This is the Meeting Memory Problem.
+> "This is the SDLC Memory Problem.
 >
-> Product teams make critical decisions every day. Then those decisions disappear into transcripts nobody reads.
+> As work moves from PRD to Blueprint to Work Order to Code--context dies. Each stage has amnesia about what came before.
 >
-> PMs waste 5 to 10 hours per week just searching for 'why.'
+> Engineers waste 5 to 10 hours per week just searching for 'why.'
 >
-> New team members take weeks to get context.
+> Teams build the wrong thing because intent got lost in translation.
 >
-> And when the PM who made the decision leaves? That knowledge walks out the door."
+> Changes upstream don't ripple downstream--until it's too late."
 
 ---
 
 ### The Solution: AMPM (30 seconds)
 
-> "We built AMPM--AI Meeting Product Manager.
+> "We built AMPM.
 >
-> It's a living memory layer for your product decisions. It extracts decisions, action items, and blockers from every meeting. It connects related discussions across time. It answers 'why did we decide that?' in seconds, with sources.
+> It's a contextual memory layer that sits across your entire SDLC--connecting meetings, PRDs, Blueprints, Work Orders, and Code in a knowledge graph.
+>
+> Ask 'why does this exist?' Get a complete answer in 2 seconds. With sources.
 >
 > *[TRANSITION TO DEMO]*
 >
-> Let me show you."
+> But here's where it gets powerful. Watch what happens when a PM changes a requirement."
 
 ---
 
-### The Demo: Decision Memory (45 seconds)
+### The Demo: Ripple Effect (45 seconds)
 
 *[Screen share showing the UI]*
 
-> "Someone just asked: 'Why are we delaying internationalization?'
+> "The PRD says 'Use OAuth 2.0 for authentication.'
 >
-> *[Type the question, hit search]*
+> The PM changes it to 'Use SAML SSO.' Enterprise requirement.
 >
-> In 2 seconds, AMPM shows:
+> *[Make the change in the UI]*
 >
-> - The decision was made April 15th in Q2 Planning
-> - Sarah, the VP Product, made the call
-> - The reasoning: 'Validate US PMF first. I18n is 6 weeks we can't afford.'
-> - It was revisited April 22nd when EMEA customers asked
-> - It was validated May 20th when US retention hit 15%
+> Watch.
+>
+> *[Ripple effect appears in ~2 seconds]*
+>
+> In 2.3 seconds, AMPM shows:
+>
+> - 1 Blueprint affected--needs complete rewrite
+> - 6 Work Orders are now invalid
+> - 3 code files need to be replaced
+>
+> It shows exactly WHAT conflicts, WHO to notify, and suggests a migration path.
 >
 > *[Point to the screen]*
 >
-> Full context. Full timeline. Full reasoning.
+> Without this? The team discovers the conflict 3 days later. After building the wrong thing.
 >
-> That used to take an hour of digging. We did it in 2 seconds."
+> With AMPM? They see it in 2 seconds. Before anyone wastes time."
 
 ---
 
-### The Second Demo: Action Item Tracking (30 seconds)
+### Why Now: The Speed Advantage (15 seconds)
 
-> "But here's where it gets really powerful.
+> "This is only possible because we have fast inference.
 >
-> 'What happened with Legal approval for payments?'
+> Analyzing 10 documents for conflicts would normally take 30 seconds. Too slow--nobody waits.
 >
-> *[Show the action item timeline]*
+> At 2-3 seconds, it's real-time. It happens while you type. It prevents mistakes instead of reporting them.
 >
-> AMPM tracked this action item across 5 meetings over 8 days.
->
-> - Assigned May 1st, estimated 3 days
-> - Blocked May 4th--Legal was unavailable
-> - Escalated May 6th--PM got involved
-> - Resolved May 8th--Leadership intervened
-> - Done May 9th
->
-> It even extracted the learning: 'Book Legal 2 weeks in advance.'
->
-> This is automatic. We didn't configure anything. AMPM just connected the dots."
+> Speed isn't a feature. Speed is what makes this usable."
 
 ---
 
 ### The Close: Vision (15 seconds)
 
-> "Product teams make decisions every day. Those decisions shouldn't disappear.
+> "Modern development is about structured workflows--PRDs to Blueprints to Work Orders to Code.
 >
-> AMPM is the AI product manager that remembers everything--so your team doesn't have to.
+> But a workflow without memory keeps making the same mistakes.
 >
-> From AM to PM, never miss a decision."
+> AMPM is the brain that remembers every decision, connects every artifact, and surfaces context at the speed of thought.
+>
+> Your SDLC shouldn't have amnesia. We fixed that."
 
 *[Pause. Done.]*
 
@@ -119,89 +125,88 @@
 
 **Have these windows ready:**
 1. Streamlit app with sample data loaded
-2. 4-5 sample meetings in the system
-3. Terminal showing response times (optional)
+2. Terminal showing response times (optional)
+3. Sample PRD, Blueprint, Work Orders visible
 
 **Sample Data Scenario:**
-- Project: ShopFlow E-commerce Platform
-- 4 meetings: Planning, 2 Standups, Leadership sync
-- Decision: Stripe over Braintree
-- Action item: Legal approval (with blocker arc)
-- Timeline: May 1-9
+- Project: "ShopFlow E-commerce Platform"
+- Feature: User Authentication
+- PRD mentions OAuth 2.0
+- Blueprint implements OAuth with Passport.js
+- 6 Work Orders for OAuth tasks
+- 3 code files for auth
 
 ---
 
-### Demo 1: Decision Memory (60 seconds)
+### Demo 1: Context Retrieval (60 seconds)
 
 **Setup the scene:**
-> "Imagine you're a new PM. Day one. Someone mentions 'the Stripe decision' and you have no idea what they're talking about. Let's ask AMPM."
+> "Imagine you're an engineer. You just joined the team. You're looking at this auth code and wondering: why OAuth? Why not SAML? Let's ask."
 
 **Action:**
-Type: `Why did we choose Stripe for payments?`
+Type: `Why are we using OAuth instead of SAML for authentication?`
 
 **While waiting (~2 seconds):**
-> "AMPM is searching across all our meetings..."
+> "AMPM is searching across meetings, PRDs, Blueprints, Slack discussions, and past decisions..."
 
 **When result appears:**
-> "1.8 seconds. Full context.
+> "In 1.8 seconds, we have the full context.
 >
-> - Sprint Planning, May 1st
-> - Mike recommended Stripe over Braintree
-> - Reasoning: Better fraud detection, cleaner API, faster integration
-> - Sarah confirmed the decision
+> - The decision was made April 15th in the Architecture Review meeting
+> - Mike, the tech lead, decided it
+> - The reasoning: 'OAuth is faster to implement for MVP. SAML adds enterprise complexity we don't need yet.'
+> - There's even a link to the meeting where this was debated.
 >
 > That would have taken 30-60 minutes to find manually. We did it in under 2 seconds."
 
 ---
 
-### Demo 2: Action Item Timeline (60 seconds)
+### Demo 2: Ripple Effect (90 seconds)
 
 **Setup the scene:**
-> "Now let's say you want to know why something took longer than expected. 'What happened with Legal approval?'"
+> "Now here's the powerful part. Let's say requirements change. An enterprise customer needs SAML. The PM updates the PRD."
 
 **Action:**
-Navigate to the action item tracker, search for "Legal"
+1. Navigate to the PRD editor
+2. Change "OAuth 2.0" to "SAML SSO"
 
-**When timeline appears:**
-> "AMPM tracked this across 5 meetings automatically.
+**As you type:**
+> "Watch what happens the moment I make this change..."
+
+**When ripple effect appears:**
+> "2.3 seconds. AMPM analyzed every connected artifact and found:
 >
-> *[Point to each node]*
+> *[Point to each section]*
 >
-> - Assigned May 1st in Planning
-> - Status check May 2nd--'meeting tomorrow'
-> - Blocker May 4th--'Legal pushed to next week'
-> - Escalation May 6th--PM stepped in
-> - Resolution May 8th--Leadership meeting
-> - Done May 9th
+> **One Blueprint affected** - The auth architecture doc references OAuth in four places. All need updating.
 >
-> 8 days total. 5 days blocked. Root cause: Legal availability.
+> **Six Work Orders are now affected** - These tasks were for OAuth. They need to be replaced with SAML tasks.
 >
-> And the learning AMPM extracted? 'Book Legal 2 weeks in advance.'
+> And it tells us WHO is affected: Bob and Alice, who were assigned to these tasks."
+
+**THE PUNCHLINE:**
+> "Without AMPM, the team discovers this conflict on Day 3--after Bob has already built half the OAuth integration.
 >
-> No manual tracking. No status spreadsheets. Just automatic connection."
+> With AMPM, the PM sees it BEFORE saving the change. We prevent the mistake instead of cleaning up after it."
 
 ---
 
-### Demo 3: Meeting Health (45 seconds)
+### Demo 3: Meeting to Artifact Tracing (Optional - 45 seconds)
 
-**Action:** Show meeting health dashboard
-
-**Say:**
-> "One more thing. AMPM also tells you which meetings are valuable.
+**If time permits:**
+> "One more thing. AMPM connects meetings to artifacts.
 >
-> *[Point to the dashboard]*
+> Let's say I want to know what decisions were made in the Architecture Review meeting.
 >
-> Sprint Planning: 9/10. 18 decisions made. High impact.
+> *[Query the meeting]*
 >
-> Standups: 7/10. Good for coordination.
+> AMPM shows:
 >
-> Weekly Product Review: 3/10. Zero decisions in the last month.
+> - 3 decisions made: OAuth over SAML, Passport.js, Redis sessions
+> - Each decision links to the PRD requirement it addresses
+> - Each decision links to the Blueprint and Work Orders it created
 >
-> AMPM's recommendation? Cancel it. Replace with async updates.
->
-> Potential savings: 24 hours per month.
->
-> Data-driven meeting management."
+> Full traceability from discussion to implementation."
 
 ---
 
@@ -209,60 +214,83 @@ Navigate to the action item tracker, search for "Legal"
 
 > "That's AMPM.
 >
-> - Decision memory: 2 seconds
-> - Action item tracking: Automatic
-> - Meeting ROI: Data-driven
+> - Context retrieval: 2 seconds
+> - Ripple detection: 2 seconds
+> - Meeting to code tracing: Complete
 >
-> From AM to PM, never miss a decision."
+> All of this requires fast inference. At normal speeds, these queries take 30+ seconds--too slow to be useful.
+>
+> At 2-3 seconds, it's real-time. It's in your flow. It actually gets used."
 
 ---
 
 ## Judge Q&A Preparation
 
-### Q: "How is this different from Otter.ai?"
+### Q: "How is this different from just using search?"
 
 **Answer:**
-> "Otter transcribes. We analyze.
+> "Search gives you a list of 47 results. AMPM gives you an answer.
 >
-> Otter gives you 50 pages of transcript. AMPM gives you 'This decision was made April 15th by Sarah because X.'
+> Search finds documents. AMPM understands relationships--this decision led to this blueprint, which created these work orders, which produced this code.
 >
-> Otter is a recording. AMPM is memory."
+> And search doesn't detect conflicts. When you change a PRD, Confluence search doesn't tell you which work orders are now invalid. AMPM does, in real-time."
 
 ---
 
-### Q: "Why product managers specifically?"
+### Q: "Why does this need fast inference? Can't you just cache everything?"
 
 **Answer:**
-> "PMs feel this pain most acutely. They're in meetings all day, every day. They're asked 'why did we decide that?' multiple times per week.
+> "You can cache retrieval. You can't cache analysis.
 >
-> But this scales to any decision-making team--leadership, engineering, sales. We start narrow to go wide."
+> When a PM changes a requirement, we need to analyze 10, 20, maybe 50 documents to find conflicts. That analysis is dynamic--it depends on the specific change.
+>
+> At 3 seconds per document, that's minutes. Nobody waits.
+>
+> At 0.3 seconds per document, it's real-time. That's what fast inference enables."
 
 ---
 
-### Q: "What if people don't want meetings recorded?"
+### Q: "How do you build the knowledge graph? Is it manual?"
 
 **Answer:**
-> "Privacy is built in. Users control what's captured. You can redact sensitive topics. You can opt out of specific meetings.
+> "It's automatic. When a meeting happens, we extract decisions. When a PRD is created, AMPM indexes it. When a Blueprint references that PRD, we capture the relationship. When a Work Order implements part of a Blueprint, we link them.
 >
-> This is about helping teams, not surveilling them."
+> Over time, the graph builds itself from the actual work being done. No manual tagging required.
+>
+> We also use LLMs to extract implicit relationships--like when someone mentions a decision in a meeting that relates to a PRD."
 
 ---
 
-### Q: "How accurate is the decision extraction?"
+### Q: "What if the graph gets stale?"
 
 **Answer:**
-> "LLMs are excellent at intent recognition. We look for decision patterns--'let's go with,' 'we've decided,' 'the call is.'
+> "That's actually one of the problems we solve. Traditional documentation gets stale because it's static.
 >
-> We confidence-score everything and let users edit. 90%+ accuracy in testing. The 10% is easy to fix."
+> AMPM is always connected to the actual artifacts. If a Blueprint is edited, we detect it. If it conflicts with the PRD, we flag it.
+>
+> Staleness detection is built in. We don't just store information--we monitor for consistency."
 
 ---
 
-### Q: "What's the business model?"
+### Q: "How does this integrate with existing SDLC tools?"
 
 **Answer:**
-> "Free tier for small teams--50 meetings. Team tier at $15/user/month with integrations. Enterprise at $40/user for compliance and API.
+> "AMPM is designed to work with standard SDLC artifact types.
 >
-> Gong built a $7B business on sales meetings alone. We're going after all product meetings."
+> Each artifact type has a specialized agent that understands its structure--Meeting agent, PRD agent, Blueprint agent, Work Order agent.
+>
+> They all feed into the central knowledge graph. So when you're looking at a Work Order and want to know why it exists, AMPM can trace it all the way back to the original meeting discussion."
+
+---
+
+### Q: "What if someone disagrees with the AI's analysis?"
+
+**Answer:**
+> "AMPM shows its sources. Every answer includes links to the actual artifacts and discussions.
+>
+> If someone disagrees, they can click through and see the original context. Then they can make their own judgment.
+>
+> We're not replacing human decisions. We're surfacing context so humans can decide faster and with more information."
 
 ---
 
@@ -270,23 +298,22 @@ Navigate to the action item tracker, search for "Legal"
 
 ### For the Opening:
 - Relatable story (everyone has experienced this)
-- Name the problem ("Meeting Memory Problem")
+- Name the problem ("SDLC Memory Problem")
 - Quantify the cost (5-10 hours/week)
 
 ### For the Solution:
-- Simple concept (AI PM that remembers)
-- Concrete capabilities (decisions, action items, connections)
+- Simple concept (memory layer for SDLC)
+- Concrete capabilities (context retrieval, ripple detection)
 - Show, don't tell (demo immediately)
 
 ### For the Demo:
 - Emphasize SPEED (say the time out loud: "1.8 seconds")
-- Show the CONNECTIONS (across meetings)
-- Make it REAL (use realistic scenario)
+- Show the ripple effect (visual cascade of impacts)
+- Make it real (use realistic scenario)
 
 ### For the Close:
-- Strong tagline ("From AM to PM")
-- Vision statement ("never miss a decision")
-- Call to action
+- Highlight speed advantage (only possible with fast inference)
+- Vision statement ("SDLC shouldn't have amnesia")
 
 ---
 
@@ -294,10 +321,10 @@ Navigate to the action item tracker, search for "Legal"
 
 | Don't Say | Say Instead |
 |-----------|-------------|
-| "We built a knowledge graph" | "We gave your meetings a memory" |
-| "Using NLP for extraction" | "We extract decisions automatically" |
-| "Semantic search capabilities" | "Ask in plain English" |
-| "Multi-modal analysis" | "Works with any meeting" |
+| "We built a knowledge graph" | "We gave your SDLC a memory" |
+| "Using AI for analysis" | "Get answers in 2 seconds" |
+| "Multi-agent architecture" | "Every artifact has context" |
+| "Semantic search" | "Ask in plain English" |
 | "Reduces cognitive load" | "Stop wasting hours searching" |
 
 **Lead with the problem and outcome, not the technology.**
@@ -311,38 +338,39 @@ Navigate to the action item tracker, search for "Legal"
 | Opening story | 30s | 0:30 |
 | Problem named | 15s | 0:45 |
 | Solution intro | 30s | 1:15 |
-| Demo: Decisions | 45s | 2:00 |
-| Demo: Actions | 30s | 2:30 |
-| Close | 15s | 2:45 |
-| **Buffer** | 15s | **3:00** |
+| Demo: Context | 20s | 1:35 |
+| Demo: Ripple | 45s | 2:20 |
+| Speed advantage | 15s | 2:35 |
+| Close | 15s | 2:50 |
+| **Buffer** | 10s | **3:00** |
 
-**Practice to hit 2:45, giving you 15 seconds buffer.**
+**Practice to hit 2:50, giving you 10 seconds buffer.**
 
 ---
 
 ## The Memorable Lines
 
 **Opening hook:**
-> "Let me tell you about something that happened to every PM in this room."
+> "Let me tell you about something that happened to every engineer in this room."
 
 **Problem statement:**
-> "Product teams make critical decisions every day. Then they disappear."
+> "Context dies as it moves through the pipeline."
 
 **Speed statement:**
-> "That used to take an hour. We did it in 2 seconds."
+> "2.3 seconds. That analysis. Without fast inference, it takes 30+ seconds--too slow to be useful."
 
 **Demo punchline:**
-> "No manual tracking. No status spreadsheets. Just automatic connection."
+> "Without AMPM, they discover this on Day 3, after building the wrong thing. With it, they see it before they save."
 
 **Close:**
-> "From AM to PM, never miss a decision."
+> "Your SDLC shouldn't have amnesia. We fixed that."
 
 ---
 
 ## Pre-Pitch Checklist
 
 - [ ] Demo data loaded and tested
-- [ ] All demo queries rehearsed
+- [ ] All three demo queries rehearsed
 - [ ] Timing practiced (under 3 minutes)
 - [ ] Backup screenshots ready (if live demo fails)
 - [ ] Response times verified (<3 seconds)
@@ -351,58 +379,4 @@ Navigate to the action item tracker, search for "Legal"
 
 ---
 
-## The AM/PM Hook
-
-**Use this in your opening:**
-
-*"You know what AM and PM means? Morning and afternoon. That's when meetings happen. All. Day. Long.*
-
-*AMPM makes sure the decisions from those meetings don't disappear when they end."*
-
----
-
-## Why You'll Win
-
-1. **Universal problem** - Every PM, every day
-2. **Instant relatability** - Judges have asked "why did we decide that?"
-3. **Clear demo** - Question -> answer is obvious value
-4. **Smart positioning** - AI PM (not another generic AI tool)
-5. **Startup potential** - Obvious path to real business
-
----
-
-## The Future Vision (If Asked)
-
-### "What's Next for AMPM?"
-
-> "Right now, AMPM analyzes meetings after they happen. But we're building something more ambitious:
->
-> **AMPM as a real-time meeting participant.**
->
-> Imagine you're in a meeting. Someone asks: 'Why did we delay internationalization again?'
->
-> AMPM hears the question, queries the knowledge graph in under 2 seconds, and **responds with audio right there in the meeting**:
->
-> *'That decision was made April 15th in Q2 Planning. Sarah decided to validate US product-market fit first because internationalization would take 6 weeks you couldn't afford at the time.'*
->
-> No one has to stop the meeting. No one has to dig through notes. AMPM becomes the team's institutional memory—actively participating, not just recording.
->
-> That's where we're headed. Post-meeting analysis is Phase 1. Real-time participation is the endgame."
-
-**Technical feasibility:**
-- Streaming STT (Deepgram: 100-200ms latency)
-- Wake word detection ("Hey AMPM")
-- Your existing query engine (<2s)
-- TTS response (ElevenLabs: ~500ms)
-- **Total: <3 seconds** - fast enough to feel conversational
-
-**Why it matters:**
-- Removes friction from knowledge access
-- Works during the meeting, not after
-- Every meeting becomes smarter because the AI remembers everything
-
----
-
 **Go win this.**
-
-**From AM to PM, never miss a decision.**

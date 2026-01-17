@@ -126,8 +126,8 @@ Thumbs.db
 # Browser profile (Playwright persistent context)
 .browser_profile/
 
-# Demo folder (development only)
-demo/
+# Demo folder (development only, root level)
+/demo/
 
 # Audio files
 *.wav
@@ -140,3 +140,4 @@ data/meetings/*.json
 # AMPM state and cache
 .ampm/
 .ampm_cache/
+.browser_profile
