@@ -17,7 +17,8 @@ from datetime import datetime
 
 from ..models import (
     Meeting, Decision, ActionItem, Person, Topic, Blocker,
-    Update, Learning, Project, RelationType
+    Update, Learning, Project, RelationType,
+    MeetingType, DecisionStatus, ActionStatus
 )
 
 
@@ -289,6 +290,7 @@ class MeetingGraph:
             "action_items": len(self._action_items),
             "people": len(self._people),
             "topics": len(self._topics),
+            "blockers": len(self._blockers),
             "total_nodes": self.graph.number_of_nodes(),
             "total_edges": self.graph.number_of_edges()
         }
@@ -302,3 +304,203 @@ class MeetingGraph:
             f"action_items={stats['action_items']}, "
             f"people={stats['people']})"
         )
+
+    # ==================== Persistence ====================
+
+    def save(self, filepath: str) -> None:
+        """
+        Save the knowledge graph to a file.
+        
+        Args:
+            filepath: Path to save the graph (JSON format)
+        """
+        import json
+        from pathlib import Path
+        
+        def serialize_obj(obj):
+            """Convert dataclass to dict for JSON serialization."""
+            if hasattr(obj, '__dataclass_fields__'):
+                result = {}
+                for field_name in obj.__dataclass_fields__:
+                    value = getattr(obj, field_name)
+                    if isinstance(value, datetime):
+                        result[field_name] = value.isoformat()
+                    elif hasattr(value, 'value'):  # Enum
+                        result[field_name] = value.value
+                    else:
+                        result[field_name] = value
+                return result
+            return obj
+        
+        data = {
+            "version": "1.0",
+            "meetings": {k: serialize_obj(v) for k, v in self._meetings.items()},
+            "decisions": {k: serialize_obj(v) for k, v in self._decisions.items()},
+            "action_items": {k: serialize_obj(v) for k, v in self._action_items.items()},
+            "people": {k: serialize_obj(v) for k, v in self._people.items()},
+            "topics": {k: serialize_obj(v) for k, v in self._topics.items()},
+            "blockers": {k: serialize_obj(v) for k, v in self._blockers.items()},
+            "projects": {k: serialize_obj(v) for k, v in self._projects.items()},
+            "graph_nodes": list(self.graph.nodes(data=True)),
+            "graph_edges": list(self.graph.edges(data=True))
+        }
+        
+        Path(filepath).parent.mkdir(parents=True, exist_ok=True)
+        with open(filepath, 'w') as f:
+            json.dump(data, f, indent=2, default=str)
+        
+        print(f"Graph saved to {filepath}")
+
+    def load(self, filepath: str) -> bool:
+        """
+        Load the knowledge graph from a file.
+        
+        Args:
+            filepath: Path to load the graph from
+            
+        Returns:
+            True if loaded successfully, False otherwise
+        """
+        import json
+        from pathlib import Path
+        
+        if not Path(filepath).exists():
+            return False
+        
+        try:
+            with open(filepath, 'r') as f:
+                data = json.load(f)
+            
+            # Clear existing data
+            self._meetings.clear()
+            self._decisions.clear()
+            self._action_items.clear()
+            self._people.clear()
+            self._topics.clear()
+            self._blockers.clear()
+            self._projects.clear()
+            self.graph.clear()
+            
+            # Restore people
+            for person_id, person_data in data.get("people", {}).items():
+                person = Person(
+                    id=person_data["id"],
+                    name=person_data["name"],
+                    role=person_data.get("role"),
+                    email=person_data.get("email"),
+                    expertise=person_data.get("expertise", [])
+                )
+                self._people[person_id] = person
+            
+            # Restore topics
+            for topic_id, topic_data in data.get("topics", {}).items():
+                topic = Topic(
+                    id=topic_data["id"],
+                    name=topic_data["name"],
+                    description=topic_data.get("description"),
+                    tags=topic_data.get("tags", [])
+                )
+                self._topics[topic_id] = topic
+            
+            # Restore meetings
+            for meeting_id, meeting_data in data.get("meetings", {}).items():
+                date = datetime.fromisoformat(meeting_data["date"]) if meeting_data.get("date") else datetime.now()
+                meeting_type_str = meeting_data.get("meeting_type", "ad_hoc")
+                meeting_type = MeetingType(meeting_type_str) if meeting_type_str else MeetingType.AD_HOC
+                
+                meeting = Meeting(
+                    id=meeting_data["id"],
+                    title=meeting_data["title"],
+                    date=date,
+                    meeting_type=meeting_type,
+                    attendees=meeting_data.get("attendees", []),
+                    decisions=meeting_data.get("decisions", []),
+                    action_items=meeting_data.get("action_items", []),
+                    blockers=meeting_data.get("blockers", []),
+                    updates=meeting_data.get("updates", []),
+                    learnings=meeting_data.get("learnings", []),
+                    topics=meeting_data.get("topics", []),
+                    transcript=meeting_data.get("transcript"),
+                    summary=meeting_data.get("summary"),
+                    duration_minutes=meeting_data.get("duration_minutes"),
+                    project=meeting_data.get("project")
+                )
+                self._meetings[meeting_id] = meeting
+            
+            # Restore decisions
+            for decision_id, dec_data in data.get("decisions", {}).items():
+                timestamp = datetime.fromisoformat(dec_data["timestamp"]) if dec_data.get("timestamp") else datetime.now()
+                status_str = dec_data.get("status", "confirmed")
+                status = DecisionStatus(status_str) if status_str else DecisionStatus.CONFIRMED
+                
+                decision = Decision(
+                    id=dec_data["id"],
+                    content=dec_data["content"],
+                    rationale=dec_data.get("rationale"),
+                    topic=dec_data.get("topic"),
+                    made_by=dec_data.get("made_by"),
+                    confirmed_by=dec_data.get("confirmed_by"),
+                    meeting_id=dec_data.get("meeting_id"),
+                    quote=dec_data.get("quote"),
+                    status=status,
+                    confidence=dec_data.get("confidence", 1.0),
+                    timestamp=timestamp,
+                    superseded_by=dec_data.get("superseded_by")
+                )
+                self._decisions[decision_id] = decision
+            
+            # Restore action items
+            for action_id, action_data in data.get("action_items", {}).items():
+                due_date = datetime.fromisoformat(action_data["due_date"]) if action_data.get("due_date") else None
+                created_at = datetime.fromisoformat(action_data["created_at"]) if action_data.get("created_at") else datetime.now()
+                completed_at = datetime.fromisoformat(action_data["completed_at"]) if action_data.get("completed_at") else None
+                status_str = action_data.get("status", "pending")
+                status = ActionStatus(status_str) if status_str else ActionStatus.PENDING
+                
+                action = ActionItem(
+                    id=action_data["id"],
+                    task=action_data["task"],
+                    assigned_to=action_data.get("assigned_to"),
+                    meeting_id=action_data.get("meeting_id"),
+                    decision_id=action_data.get("decision_id"),
+                    due_date=due_date,
+                    status=status,
+                    estimated_days=action_data.get("estimated_days"),
+                    actual_days=action_data.get("actual_days"),
+                    blocker=action_data.get("blocker"),
+                    completed_at=completed_at,
+                    created_at=created_at
+                )
+                self._action_items[action_id] = action
+            
+            # Restore blockers
+            for blocker_id, blocker_data in data.get("blockers", {}).items():
+                created_at = datetime.fromisoformat(blocker_data["created_at"]) if blocker_data.get("created_at") else datetime.now()
+                resolved_at = datetime.fromisoformat(blocker_data["resolved_at"]) if blocker_data.get("resolved_at") else None
+                
+                blocker = Blocker(
+                    id=blocker_data["id"],
+                    description=blocker_data["description"],
+                    reported_by=blocker_data.get("reported_by"),
+                    meeting_id=blocker_data.get("meeting_id"),
+                    impact=blocker_data.get("impact"),
+                    resolution=blocker_data.get("resolution"),
+                    resolved=blocker_data.get("resolved", False),
+                    resolved_at=resolved_at,
+                    created_at=created_at
+                )
+                self._blockers[blocker_id] = blocker
+            
+            # Restore NetworkX graph
+            for node_id, node_data in data.get("graph_nodes", []):
+                self.graph.add_node(node_id, **node_data)
+            
+            for source, target, edge_data in data.get("graph_edges", []):
+                self.graph.add_edge(source, target, **edge_data)
+            
+            print(f"Graph loaded from {filepath}: {self.stats}")
+            return True
+            
+        except Exception as e:
+            print(f"Error loading graph: {e}")
+            return False

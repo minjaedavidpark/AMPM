@@ -16,8 +16,6 @@ import time
 from typing import Optional
 from dataclasses import dataclass
 
-from cerebras.cloud.sdk import Cerebras
-
 from .graph import MeetingGraph
 from .embeddings import EmbeddingStore, SearchResult
 
@@ -53,8 +51,23 @@ class QueryEngine:
         self.graph = graph
         self.embeddings = embeddings or EmbeddingStore()
 
-        # Initialize Cerebras for fast LLM inference
-        self.cerebras = Cerebras(api_key=os.getenv("CEREBRAS_API_KEY"))
+        # Initialize LLM - try Cerebras first, fall back to OpenAI
+        self.cerebras = None
+        self.openai = None
+        
+        if os.getenv("CEREBRAS_API_KEY"):
+            try:
+                from cerebras.cloud.sdk import Cerebras
+                self.cerebras = Cerebras(api_key=os.getenv("CEREBRAS_API_KEY"))
+            except ImportError:
+                pass
+        
+        if not self.cerebras and os.getenv("OPENAI_API_KEY"):
+            try:
+                from openai import OpenAI
+                self.openai = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+            except ImportError:
+                pass
 
     def query(self, question: str, top_k: int = 5) -> QueryResult:
         """
@@ -173,17 +186,36 @@ Context:
 Provide a clear, sourced answer. If the information isn't in the context, say so."""
 
         try:
-            response = self.cerebras.chat.completions.create(
-                model="llama-3.3-70b",
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_prompt}
-                ],
-                max_tokens=300,
-                temperature=0.7
-            )
-
-            answer = response.choices[0].message.content
+            answer = None
+            
+            # Try Cerebras first
+            if self.cerebras:
+                response = self.cerebras.chat.completions.create(
+                    model="llama-3.3-70b",
+                    messages=[
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": user_prompt}
+                    ],
+                    max_tokens=500,
+                    temperature=0.7
+                )
+                answer = response.choices[0].message.content
+            
+            # Fall back to OpenAI
+            elif self.openai:
+                response = self.openai.chat.completions.create(
+                    model="gpt-4o-mini",
+                    messages=[
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": user_prompt}
+                    ],
+                    max_tokens=500,
+                    temperature=0.7
+                )
+                answer = response.choices[0].message.content
+            
+            else:
+                return "No LLM API available. Please set OPENAI_API_KEY or CEREBRAS_API_KEY.", 0.0
 
             # Simple confidence based on context availability
             confidence = min(1.0, len(context) / 3)

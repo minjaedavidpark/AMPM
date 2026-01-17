@@ -84,33 +84,131 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 
+def get_source_files_hash(data_dir: str) -> str:
+    """Get a hash of all source files to detect changes."""
+    import hashlib
+    from pathlib import Path
+    
+    hasher = hashlib.md5()
+    data_path = Path(data_dir)
+    
+    if not data_path.exists():
+        return ""
+    
+    # Get all JSON files sorted by name
+    for file_path in sorted(data_path.glob("*.json")):
+        # Include filename and modification time
+        stat = file_path.stat()
+        hasher.update(f"{file_path.name}:{stat.st_mtime}:{stat.st_size}".encode())
+    
+    return hasher.hexdigest()
+
+
+def load_or_build_knowledge_graph(data_dir: str = "data/samples", cache_dir: str = ".ampm_cache"):
+    """
+    Load knowledge graph from cache or build from source files.
+    
+    Returns:
+        Tuple of (loader, was_cached, error)
+    """
+    from pathlib import Path
+    import json
+    
+    cache_path = Path(cache_dir)
+    graph_cache = cache_path / "graph.json"
+    embeddings_cache = cache_path / "embeddings.json"
+    metadata_cache = cache_path / "metadata.json"
+    
+    # Calculate hash of source files
+    source_hash = get_source_files_hash(data_dir)
+    
+    # Check if cache is valid
+    cache_valid = False
+    if metadata_cache.exists():
+        try:
+            with open(metadata_cache, 'r') as f:
+                metadata = json.load(f)
+            if metadata.get("source_hash") == source_hash:
+                cache_valid = True
+                print("Cache is valid (source files unchanged)")
+        except Exception:
+            pass
+    
+    # Try to load from cache
+    if cache_valid and graph_cache.exists() and embeddings_cache.exists():
+        print("Loading from cache...")
+        try:
+            from ampm.core.graph import MeetingGraph
+            from ampm.core.embeddings import EmbeddingStore
+            
+            graph = MeetingGraph()
+            embeddings = EmbeddingStore(use_backboard=False)
+            
+            if graph.load(str(graph_cache)) and embeddings.load(str(embeddings_cache)):
+                # Create a simple loader wrapper
+                loader = MeetingLoader(graph, embeddings)
+                return loader, True, None
+            else:
+                print("Cache load failed, rebuilding...")
+        except Exception as e:
+            print(f"Cache load error: {e}, rebuilding...")
+    
+    # Build from source
+    print("Building knowledge graph from source files...")
+    loader = MeetingLoader()
+    
+    meetings = loader.load_directory(data_dir)
+    if not meetings:
+        return None, False, f"No meetings found in {data_dir}"
+    
+    print(f"Loaded {len(meetings)} meetings")
+    print(f"Graph stats: {loader.graph.stats}")
+    
+    # Save to cache
+    try:
+        cache_path.mkdir(parents=True, exist_ok=True)
+        
+        loader.graph.save(str(graph_cache))
+        loader.embeddings.save(str(embeddings_cache))
+        
+        # Save metadata
+        with open(metadata_cache, 'w') as f:
+            json.dump({
+                "source_hash": source_hash,
+                "data_dir": data_dir,
+                "stats": loader.graph.stats
+            }, f, indent=2)
+        
+        print("Cache saved successfully")
+    except Exception as e:
+        print(f"Warning: Could not save cache: {e}")
+    
+    return loader, False, None
+
+
 @st.cache_resource(show_spinner="Loading meetings and building knowledge graph...")
 def initialize_ampm(data_dir: str = "data/samples"):
     """
     Initialize AMPM by loading meetings and building knowledge graph.
     
     This is cached to avoid reprocessing on every page load.
+    Uses persistent file cache to avoid rebuilding on app restart.
     """
     # Check for API key
     if not os.getenv("OPENAI_API_KEY"):
         return None, None, "Missing OPENAI_API_KEY environment variable"
     
     try:
-        # Initialize loader with graph
-        print("Initializing AMPM...")
-        loader = MeetingLoader()
+        # Load or build the knowledge graph
+        loader, was_cached, error = load_or_build_knowledge_graph(data_dir)
         
-        # Load meetings from directory
-        print(f"Loading meetings from: {data_dir}")
-        meetings = loader.load_directory(data_dir)
-        print(f"Loaded {len(meetings)} meetings")
+        if error:
+            return None, None, error
         
-        if not meetings:
-            return None, None, f"No meetings found in {data_dir}"
-        
-        # Get graph stats
-        stats = loader.graph.get_stats()
-        print(f"Graph stats: {stats}")
+        if was_cached:
+            print("Using cached knowledge graph")
+        else:
+            print("Built new knowledge graph")
         
         # Create query engine
         engine = QueryEngine(loader.graph, loader.embeddings)
@@ -128,16 +226,29 @@ def render_sidebar(loader):
     st.sidebar.markdown("## 🕐 AMPM")
     st.sidebar.markdown("*AI Meeting Product Manager*")
     
-    # Cache clear button
-    if st.sidebar.button("🔄 Reload Data"):
-        st.cache_resource.clear()
-        st.rerun()
+    # Cache control buttons
+    col1, col2 = st.sidebar.columns(2)
+    with col1:
+        if st.button("🔄 Reload"):
+            st.cache_resource.clear()
+            st.rerun()
+    with col2:
+        if st.button("🗑️ Clear Cache"):
+            # Clear persistent cache
+            import shutil
+            from pathlib import Path
+            cache_dir = Path(".ampm_cache")
+            if cache_dir.exists():
+                shutil.rmtree(cache_dir)
+                st.sidebar.success("Cache cleared!")
+            st.cache_resource.clear()
+            st.rerun()
     
     st.sidebar.markdown("---")
     
     # Stats
     if loader and loader.graph:
-        stats = loader.graph.get_stats()
+        stats = loader.graph.stats
         
         st.sidebar.markdown("### 📊 Knowledge Graph Stats")
         col1, col2 = st.sidebar.columns(2)
@@ -149,7 +260,6 @@ def render_sidebar(loader):
         
         with col2:
             st.metric("Actions", stats.get('action_items', 0))
-            st.metric("Blockers", stats.get('blockers', 0))
             st.metric("People", stats.get('people', 0))
         
         st.sidebar.markdown("---")
@@ -203,10 +313,15 @@ def render_ask_tab(engine: QueryEngine):
             if result.sources:
                 st.markdown("### 📚 Sources")
                 for source in result.sources[:5]:
+                    # Sources are dicts
+                    meeting_title = source.get('meeting_title', source.get('meeting_id', 'Unknown'))
+                    date = source.get('date', 'Unknown date')
+                    content_type = source.get('type', 'content')
+                    content = source.get('content', source.get('text', ''))[:150]
                     st.markdown(f"""
                     <div class='source-card'>
-                        <strong>{source.meeting_title or source.meeting_id}</strong> ({source.date or 'Unknown date'})<br/>
-                        <em>{source.content_type}</em>: {source.content[:150]}...
+                        <strong>{meeting_title}</strong> ({date})<br/>
+                        <em>{content_type}</em>: {content}...
                     </div>
                     """, unsafe_allow_html=True)
         else:
@@ -218,7 +333,8 @@ def render_decisions_tab(loader):
     st.markdown("### 📋 Decision Ledger")
     st.markdown("All decisions extracted from meetings, sorted by date.")
     
-    decisions = loader.graph.get_all_decisions()
+    # Access decisions from the internal dict
+    decisions = list(loader.graph._decisions.values())
     
     if not decisions:
         st.info("No decisions found in the knowledge graph.")
@@ -234,26 +350,36 @@ def render_decisions_tab(loader):
     # Filter and sort
     filtered = decisions
     if search:
-        filtered = [d for d in filtered if search.lower() in d.what.lower() 
-                    or search.lower() in (d.why or '').lower()]
+        filtered = [d for d in filtered if search.lower() in d.content.lower() 
+                    or search.lower() in (d.rationale or '').lower()]
     
     if sort_order == "Newest first":
-        filtered = sorted(filtered, key=lambda d: d.date or '', reverse=True)
+        filtered = sorted(filtered, key=lambda d: d.timestamp, reverse=True)
     else:
-        filtered = sorted(filtered, key=lambda d: d.date or '')
+        filtered = sorted(filtered, key=lambda d: d.timestamp)
     
     st.markdown(f"**{len(filtered)} decisions found**")
     
     # Display decisions
     for decision in filtered:
+        # Get meeting title if available
+        meeting = loader.graph.get_meeting(decision.meeting_id) if decision.meeting_id else None
+        meeting_title = meeting.title if meeting else decision.meeting_id or 'Unknown meeting'
+        
+        # Get person name if available
+        person = loader.graph.get_person(decision.made_by) if decision.made_by else None
+        made_by = person.name if person else decision.made_by or 'Unknown'
+        
+        date_str = decision.timestamp.strftime('%Y-%m-%d') if decision.timestamp else 'Unknown'
+        
         st.markdown(f"""
         <div class='decision-card'>
-            <strong>📌 {decision.what}</strong><br/>
-            <em>Reasoning:</em> {decision.why or 'Not specified'}<br/>
+            <strong>📌 {decision.content}</strong><br/>
+            <em>Reasoning:</em> {decision.rationale or 'Not specified'}<br/>
             <small>
-                👤 {decision.who or 'Unknown'} | 
-                📅 {decision.date or 'Unknown'} | 
-                📋 {decision.meeting_id or 'Unknown meeting'}
+                👤 {made_by} | 
+                📅 {date_str} | 
+                📋 {meeting_title}
             </small>
         </div>
         """, unsafe_allow_html=True)
@@ -264,8 +390,8 @@ def render_actions_tab(loader):
     st.markdown("### ✅ Action Items")
     st.markdown("Track action items across all meetings.")
     
-    # Get all action items
-    actions = loader.graph.get_all_action_items()
+    # Access action items from the internal dict
+    actions = list(loader.graph._action_items.values())
     
     if not actions:
         st.info("No action items found in the knowledge graph.")
@@ -276,37 +402,44 @@ def render_actions_tab(loader):
     with col1:
         assignee_filter = st.text_input("Filter by assignee:", placeholder="e.g., Bob")
     with col2:
-        status_filter = st.selectbox("Status:", ["All", "pending", "completed", "in_progress"])
+        status_options = ["All", "pending", "in_progress", "completed", "blocked"]
+        status_filter = st.selectbox("Status:", status_options)
     with col3:
         sort_by = st.selectbox("Sort by:", ["Date", "Assignee"])
     
     # Apply filters
     filtered = actions
     if assignee_filter:
-        filtered = [a for a in filtered if assignee_filter.lower() in (a.assignee or '').lower()]
+        filtered = [a for a in filtered 
+                    if assignee_filter.lower() in (a.assigned_to or '').lower()]
     if status_filter != "All":
         filtered = [a for a in filtered if a.status.value == status_filter]
     
     # Sort
     if sort_by == "Date":
-        filtered = sorted(filtered, key=lambda a: a.due_date or '', reverse=True)
+        filtered = sorted(filtered, key=lambda a: a.created_at, reverse=True)
     else:
-        filtered = sorted(filtered, key=lambda a: a.assignee or '')
+        filtered = sorted(filtered, key=lambda a: a.assigned_to or '')
     
     st.markdown(f"**{len(filtered)} action items found**")
     
     # Display actions
     for action in filtered:
         status = action.status.value if action.status else 'pending'
-        status_emoji = "✅" if status == "completed" else "⏳" if status == "in_progress" else "📋"
+        status_emoji = "✅" if status == "completed" else "⏳" if status == "in_progress" else "🔴" if status == "blocked" else "📋"
+        
+        # Get assignee name
+        person = loader.graph.get_person(action.assigned_to) if action.assigned_to else None
+        assignee = person.name if person else action.assigned_to or 'Unassigned'
+        
+        due_date = action.due_date.strftime('%Y-%m-%d') if action.due_date else 'No due date'
         
         st.markdown(f"""
         <div class='action-card'>
             <strong>{status_emoji} {action.task}</strong><br/>
-            <em>Context:</em> {action.context or 'No context provided'}<br/>
             <small>
-                👤 {action.assignee or 'Unassigned'} | 
-                📅 Due: {action.due_date or 'Unknown'} |
+                👤 {assignee} | 
+                📅 Due: {due_date} |
                 Status: {status}
             </small>
         </div>
@@ -318,69 +451,96 @@ def render_meetings_tab(loader):
     st.markdown("### 📅 Meeting History")
     st.markdown("Browse all meetings and their extracted content.")
     
-    all_meetings = loader.graph.get_all_meetings()
+    # Access meetings from the internal dict
+    all_meetings = list(loader.graph._meetings.values())
     
     if not all_meetings:
         st.info("No meetings loaded.")
         return
     
+    # Sort by date
+    all_meetings = sorted(all_meetings, key=lambda m: m.date, reverse=True)
+    
     # Meeting selector
-    meeting_options = {f"{m.title} ({m.date})": m.id for m in all_meetings}
+    meeting_options = {f"{m.title} ({m.date.strftime('%Y-%m-%d') if m.date else 'Unknown'})": m.id 
+                       for m in all_meetings}
     selected_title = st.selectbox("Select a meeting:", list(meeting_options.keys()))
     
     if selected_title:
         meeting_id = meeting_options[selected_title]
-        meeting = next((m for m in all_meetings if m.id == meeting_id), None)
+        meeting = loader.graph.get_meeting(meeting_id)
         
         if meeting:
             st.markdown(f"## {meeting.title}")
             
             col1, col2 = st.columns(2)
             with col1:
-                st.markdown(f"**Date:** {meeting.date or 'Unknown'}")
+                date_str = meeting.date.strftime('%Y-%m-%d') if meeting.date else 'Unknown'
+                st.markdown(f"**Date:** {date_str}")
             with col2:
                 st.markdown(f"**Duration:** {meeting.duration_minutes or 'Unknown'} minutes")
             
-            st.markdown(f"**Participants:** {', '.join(meeting.participants) if meeting.participants else 'Unknown'}")
+            # Get attendee names
+            attendee_names = []
+            for person_id in meeting.attendees:
+                person = loader.graph.get_person(person_id)
+                attendee_names.append(person.name if person else person_id)
+            st.markdown(f"**Participants:** {', '.join(attendee_names) if attendee_names else 'Unknown'}")
+            
+            if meeting.summary:
+                st.markdown(f"**Summary:** {meeting.summary}")
             
             # Get related entities
-            decisions = loader.graph.get_decisions_for_meeting(meeting_id)
-            actions = loader.graph.get_action_items_for_meeting(meeting_id)
-            blockers = loader.graph.get_blockers_for_meeting(meeting_id)
+            decisions = loader.graph.get_decisions_by_meeting(meeting_id)
             
             # Decisions
             if decisions:
                 st.markdown(f"### 📌 Decisions ({len(decisions)})")
                 for d in decisions:
+                    person = loader.graph.get_person(d.made_by) if d.made_by else None
+                    made_by = person.name if person else d.made_by or 'Unknown'
                     st.markdown(f"""
                     <div class='decision-card'>
-                        <strong>{d.what}</strong><br/>
-                        <em>Reasoning:</em> {d.why or 'Not specified'}<br/>
-                        <small>👤 Decided by: {d.who or 'Unknown'}</small>
+                        <strong>{d.content}</strong><br/>
+                        <em>Reasoning:</em> {d.rationale or 'Not specified'}<br/>
+                        <small>👤 Decided by: {made_by}</small>
                     </div>
                     """, unsafe_allow_html=True)
             
-            # Action Items
-            if actions:
-                st.markdown(f"### ✅ Action Items ({len(actions)})")
-                for a in actions:
+            # Action Items - get from meeting's action_items list
+            action_items = []
+            for action_id in meeting.action_items:
+                action = loader.graph._action_items.get(action_id)
+                if action:
+                    action_items.append(action)
+            
+            if action_items:
+                st.markdown(f"### ✅ Action Items ({len(action_items)})")
+                for a in action_items:
+                    person = loader.graph.get_person(a.assigned_to) if a.assigned_to else None
+                    assignee = person.name if person else a.assigned_to or 'Unassigned'
                     st.markdown(f"""
                     <div class='action-card'>
                         <strong>{a.task}</strong><br/>
-                        <small>👤 Assigned to: {a.assignee or 'Unassigned'}</small>
+                        <small>👤 Assigned to: {assignee}</small>
                     </div>
                     """, unsafe_allow_html=True)
             
-            # Blockers
+            # Blockers - get from meeting's blockers list
+            blockers = []
+            for blocker_id in meeting.blockers:
+                blocker = loader.graph._blockers.get(blocker_id)
+                if blocker:
+                    blockers.append(blocker)
+            
             if blockers:
                 st.markdown(f"### 🚧 Blockers ({len(blockers)})")
                 for b in blockers:
-                    severity = b.severity or 'medium'
-                    severity_emoji = "🔴" if severity == 'high' else "🟡" if severity == 'medium' else "🟢"
+                    status = "✅ Resolved" if b.resolved else "⏳ Open"
                     st.markdown(f"""
                     <div class='blocker-card'>
-                        <strong>{severity_emoji} {b.description}</strong><br/>
-                        <small>Severity: {severity} | Status: {b.status or 'Unknown'}</small>
+                        <strong>{b.description}</strong><br/>
+                        <small>Status: {status}</small>
                     </div>
                     """, unsafe_allow_html=True)
 
@@ -390,7 +550,8 @@ def render_blockers_tab(loader):
     st.markdown("### 🚧 Blockers")
     st.markdown("Track impediments and blockers across all meetings.")
     
-    blockers = loader.graph.get_all_blockers()
+    # Access blockers from the internal dict
+    blockers = list(loader.graph._blockers.values())
     
     if not blockers:
         st.info("No blockers found in the knowledge graph.")
@@ -400,32 +561,35 @@ def render_blockers_tab(loader):
     col1, col2 = st.columns(2)
     with col1:
         status_filter = st.selectbox("Status:", ["All", "open", "resolved"], key="blocker_status")
-    with col2:
-        severity_filter = st.selectbox("Severity:", ["All", "high", "medium", "low"])
     
     # Apply filters
     filtered = blockers
-    if status_filter != "All":
-        filtered = [b for b in filtered if b.status == status_filter]
-    if severity_filter != "All":
-        filtered = [b for b in filtered if b.severity == severity_filter]
+    if status_filter == "open":
+        filtered = [b for b in filtered if not b.resolved]
+    elif status_filter == "resolved":
+        filtered = [b for b in filtered if b.resolved]
     
     st.markdown(f"**{len(filtered)} blockers found**")
     
     # Display blockers
     for blocker in filtered:
-        severity = blocker.severity or 'medium'
-        severity_emoji = "🔴" if severity == 'high' else "🟡" if severity == 'medium' else "🟢"
-        status = blocker.status or 'open'
-        status_emoji = "✅" if status == "resolved" else "⏳"
+        status = "✅ Resolved" if blocker.resolved else "⏳ Open"
+        status_emoji = "✅" if blocker.resolved else "🔴"
+        
+        # Get reporter name
+        person = loader.graph.get_person(blocker.reported_by) if blocker.reported_by else None
+        reported_by = person.name if person else blocker.reported_by or 'Unknown'
+        
+        date_str = blocker.created_at.strftime('%Y-%m-%d') if blocker.created_at else 'Unknown'
         
         st.markdown(f"""
         <div class='blocker-card'>
-            <strong>{severity_emoji} {blocker.description}</strong><br/>
+            <strong>{status_emoji} {blocker.description}</strong><br/>
+            <em>Impact:</em> {blocker.impact or 'Not specified'}<br/>
             <small>
-                👤 Affects: {blocker.owner or 'Unknown'} | 
-                📅 {blocker.raised_date or 'Unknown'} |
-                {status_emoji} {status}
+                👤 Reported by: {reported_by} | 
+                📅 {date_str} |
+                {status}
             </small>
         </div>
         """, unsafe_allow_html=True)
@@ -451,9 +615,10 @@ def main():
         st.markdown("""
         ### Setup Instructions
         
-        1. Make sure you have an OpenAI API key set in `.env`:
+        1. Make sure you have API keys set in `.env`:
            ```
            OPENAI_API_KEY=sk-...
+           CEREBRAS_API_KEY=...
            ```
         
         2. Make sure you have meeting files in the `data/samples/` directory

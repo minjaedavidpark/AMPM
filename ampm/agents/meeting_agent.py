@@ -11,10 +11,9 @@ Responsibilities:
 """
 
 import os
+import json
 from typing import Optional
 from datetime import datetime
-
-from cerebras.cloud.sdk import Cerebras
 
 from ..models import (
     Meeting, Decision, ActionItem, Blocker, Update, Learning,
@@ -41,7 +40,24 @@ class MeetingAgent:
         """
         self.graph = graph
         self.embeddings = embeddings
-        self.cerebras = Cerebras(api_key=os.getenv("CEREBRAS_API_KEY"))
+        
+        # Try Cerebras first, fall back to OpenAI
+        self.cerebras = None
+        self.openai = None
+        
+        if os.getenv("CEREBRAS_API_KEY"):
+            try:
+                from cerebras.cloud.sdk import Cerebras
+                self.cerebras = Cerebras(api_key=os.getenv("CEREBRAS_API_KEY"))
+            except ImportError:
+                pass
+        
+        if not self.cerebras and os.getenv("OPENAI_API_KEY"):
+            try:
+                from openai import OpenAI
+                self.openai = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+            except ImportError:
+                pass
 
     def process_meeting_data(self, data: dict) -> Meeting:
         """
@@ -59,8 +75,19 @@ class MeetingAgent:
             "updates": [...],
             "learnings": [...]
         }
+        
+        Also supports alternate format with transcript only (auto-extracts):
+        {
+            "meeting_id": "meeting_001",
+            "title": "Sprint Planning",
+            "date": "2026-05-01",
+            "participants": ["Sarah", "Mike", "Bob"],
+            "transcript": "..."
+        }
         """
-        meeting_id = data.get("id", f"meeting_{datetime.now().timestamp()}")
+        # Handle alternate field names
+        meeting_id = data.get("id") or data.get("meeting_id") or f"meeting_{datetime.now().timestamp()}"
+        attendees = data.get("attendees") or data.get("participants") or []
 
         # Parse date
         date_str = data.get("date", "")
@@ -69,6 +96,24 @@ class MeetingAgent:
         except ValueError:
             date = datetime.now()
 
+        # Check if we have transcript but no structured data
+        transcript = data.get("transcript")
+        has_structured_data = any([
+            data.get("decisions"),
+            data.get("action_items"),
+            data.get("blockers")
+        ])
+        
+        # Auto-extract from transcript if needed
+        if transcript and not has_structured_data:
+            print(f"  Extracting entities from transcript for {data.get('title', 'meeting')}...")
+            try:
+                extracted = self.extract_from_transcript(transcript, data.get("title", "Meeting"))
+                # Merge extracted data
+                data = {**data, **extracted}
+            except Exception as e:
+                print(f"  Warning: Could not extract from transcript: {e}")
+
         # Create meeting
         meeting = Meeting(
             id=meeting_id,
@@ -76,13 +121,16 @@ class MeetingAgent:
             date=date,
             meeting_type=self._parse_meeting_type(data.get("title", "")),
             duration_minutes=data.get("duration_minutes"),
-            transcript=data.get("transcript"),
+            transcript=transcript,
             summary=data.get("summary"),
             project=data.get("project")
         )
 
-        # Process attendees
-        for attendee_name in data.get("attendees", []):
+        # Process attendees (handle "Name (Role)" format)
+        for attendee_name in attendees:
+            # Strip role if present: "Sarah Chen (VP Product)" -> "Sarah Chen"
+            if "(" in attendee_name:
+                attendee_name = attendee_name.split("(")[0].strip()
             person = self._get_or_create_person(attendee_name)
             meeting.attendees.append(person.id)
 
@@ -320,19 +368,12 @@ class MeetingAgent:
 
         Returns dict in the expected meeting data format.
         """
-        try:
-            response = self.cerebras.chat.completions.create(
-                model="llama-3.3-70b",
-                messages=[
-                    {
-                        "role": "system",
-                        "content": """You extract structured information from meeting transcripts.
+        system_prompt = """You extract structured information from meeting transcripts.
 Extract: decisions, action items, blockers, and key updates.
-Be precise about WHO said WHAT and any deadlines mentioned."""
-                    },
-                    {
-                        "role": "user",
-                        "content": f"""Extract structured information from this meeting transcript:
+Be precise about WHO said WHAT and any deadlines mentioned.
+Return ONLY valid JSON, no other text."""
+
+        user_prompt = f"""Extract structured information from this meeting transcript:
 
 Meeting: {meeting_title}
 
@@ -346,15 +387,52 @@ Return as JSON with this structure:
   "blockers": [{{"description": "...", "reported_by": "...", "impact": "..."}}],
   "summary": "..."
 }}"""
-                    }
-                ],
-                max_tokens=1000,
-                temperature=0.3
-            )
 
-            # Parse JSON from response
-            import json
-            content = response.choices[0].message.content
+        try:
+            content = None
+            
+            # Try Cerebras first
+            if self.cerebras:
+                response = self.cerebras.chat.completions.create(
+                    model="llama-3.3-70b",
+                    messages=[
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": user_prompt}
+                    ],
+                    max_tokens=2000,
+                    temperature=0.3
+                )
+                content = response.choices[0].message.content
+            
+            # Fall back to OpenAI
+            elif self.openai:
+                response = self.openai.chat.completions.create(
+                    model="gpt-4o-mini",
+                    messages=[
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": user_prompt}
+                    ],
+                    max_tokens=2000,
+                    temperature=0.3
+                )
+                content = response.choices[0].message.content
+            
+            else:
+                print("  Warning: No LLM API available for extraction")
+                return {}
+
+            if not content:
+                return {}
+
+            # Clean up response - remove markdown code blocks if present
+            content = content.strip()
+            if content.startswith("```json"):
+                content = content[7:]
+            elif content.startswith("```"):
+                content = content[3:]
+            if content.endswith("```"):
+                content = content[:-3]
+            content = content.strip()
 
             # Try to extract JSON
             start = content.find("{")
@@ -365,5 +443,5 @@ Return as JSON with this structure:
             return {}
 
         except Exception as e:
-            print(f"Error extracting from transcript: {e}")
+            print(f"  Error extracting from transcript: {e}")
             return {}

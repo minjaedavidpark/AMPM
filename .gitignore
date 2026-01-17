@@ -136,3 +136,6 @@ demo/
 # Local data
 data/meetings/*.json
 !data/meetings/.gitkeep
+
+# AMPM cache
+.ampm_cache/

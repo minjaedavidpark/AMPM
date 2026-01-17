@@ -269,3 +269,57 @@ class EmbeddingStore:
     def document_count(self) -> int:
         """Number of indexed documents."""
         return len(self._documents)
+
+    # ==================== Persistence ====================
+
+    def save(self, filepath: str) -> None:
+        """
+        Save the embedding store to a file.
+        
+        Args:
+            filepath: Path to save (JSON format)
+        """
+        import json
+        from pathlib import Path
+        
+        data = {
+            "version": "1.0",
+            "documents": self._documents,
+            "embeddings": self._embeddings
+        }
+        
+        Path(filepath).parent.mkdir(parents=True, exist_ok=True)
+        with open(filepath, 'w') as f:
+            json.dump(data, f)
+        
+        print(f"Embeddings saved to {filepath} ({len(self._documents)} documents)")
+
+    def load(self, filepath: str) -> bool:
+        """
+        Load the embedding store from a file.
+        
+        Args:
+            filepath: Path to load from
+            
+        Returns:
+            True if loaded successfully, False otherwise
+        """
+        import json
+        from pathlib import Path
+        
+        if not Path(filepath).exists():
+            return False
+        
+        try:
+            with open(filepath, 'r') as f:
+                data = json.load(f)
+            
+            self._documents = data.get("documents", [])
+            self._embeddings = data.get("embeddings", [])
+            
+            print(f"Embeddings loaded from {filepath} ({len(self._documents)} documents)")
+            return True
+            
+        except Exception as e:
+            print(f"Error loading embeddings: {e}")
+            return False
