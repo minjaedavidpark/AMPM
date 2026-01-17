@@ -390,11 +390,11 @@ def render_sidebar(loader, engine=None):
 
 
 def render_ask_tab(engine: QueryEngine):
-    """Render the Ask Questions tab."""
+    """Render the Ask Questions tab with cascading artifact view."""
 
     # Use form for Enter key support
     with st.form(key="ask_form", clear_on_submit=False):
-        col_input, col_ask, col_audio = st.columns([8, 1, 1])
+        col_input, col_ask = st.columns([9, 1])
 
         with col_input:
             question = st.text_input(
@@ -407,90 +407,104 @@ def render_ask_tab(engine: QueryEngine):
         with col_ask:
             ask_clicked = st.form_submit_button("Ask", type="primary", use_container_width=True)
 
-        with col_audio:
-            has_elevenlabs = bool(os.getenv("ELEVENLABS_API_KEY"))
-            speak_response = st.form_submit_button("🔊", disabled=not has_elevenlabs,
-                                       help="Voice response" if has_elevenlabs else "Requires ElevenLabs API key",
-                                       use_container_width=True)
-
     # Process the question
-    if (ask_clicked or speak_response) and question:
-        with st.spinner("Searching..."):
+    if ask_clicked and question:
+        with st.spinner("Searching knowledge graph..."):
             start_time = time.time()
             result = engine.query(question)
             elapsed = time.time() - start_time
 
         # Show answer
         st.markdown(f"<div class='answer-text'>{result.answer}</div>", unsafe_allow_html=True)
-        st.markdown(f"<p class='time-label'>{elapsed:.1f}s</p>", unsafe_allow_html=True)
+        st.markdown(f"<p class='time-label'>Answered in {elapsed:.1f}s</p>", unsafe_allow_html=True)
 
-        # Generate voice response if enabled
-        if speak_response and has_elevenlabs:
-            try:
-                from elevenlabs import ElevenLabs
-                elevenlabs_client = ElevenLabs(api_key=os.getenv("ELEVENLABS_API_KEY"))
-                voice_id = os.getenv("ELEVENLABS_VOICE_ID", "21m00Tcm4TlvDq8ikWAM")
-                audio_generator = elevenlabs_client.text_to_speech.convert(
-                    text=result.answer, voice_id=voice_id,
-                    model_id="eleven_turbo_v2_5", output_format="mp3_44100_128"
-                )
-                st.audio(b"".join(audio_generator), format="audio/mp3", autoplay=True)
-            except Exception:
-                pass
-
-        # Only show sources if the answer is substantive (not "I don't know" type responses)
+        # Only show artifacts if the answer is substantive
         answer_lower = result.answer.lower()
         no_info_phrases = ["don't have enough information", "not mentioned", "no mention",
                           "not addressed", "cannot find", "no information", "not found"]
         has_relevant_answer = not any(phrase in answer_lower for phrase in no_info_phrases)
 
         if result.sources and has_relevant_answer and result.confidence > 0.3:
-            with st.expander("Sources", expanded=False):
-                for source in result.sources[:3]:
-                    meeting_title = source.get('meeting_title', source.get('meeting_id', ''))
-                    if not meeting_title:
-                        continue
+            st.markdown("---")
+            st.markdown("**Knowledge Path**")
 
-                    # Format date nicely (remove time portion)
-                    date = source.get('meeting_date', source.get('date', ''))
-                    if date:
-                        date = str(date).split(' ')[0]  # Remove time portion
-                        if date == 'Unknown date':
-                            date = ''
+            # Categorize sources by type
+            decisions = []
+            work_orders = []
+            artifacts = []
 
-                    # Get meaningful summary - prefer decision/rationale over raw content
-                    decision = source.get('decision_content', '')
-                    rationale = source.get('rationale', '')
-                    content = source.get('content', '')
+            for source in result.sources:
+                source_type = source.get('source', source.get('type', ''))
+                if source_type == 'decision' or source.get('decision_content'):
+                    decisions.append(source)
+                elif source_type == 'action_item':
+                    work_orders.append(source)
+                else:
+                    artifacts.append(source)
 
-                    # Pick best summary, skip if it duplicates the meeting title
-                    summary = ''
-                    for text in [decision, rationale, content]:
-                        if not text or len(text) < 20:
-                            continue
-                        # Skip if text is just the meeting title or starts with it
-                        if text == meeting_title:
-                            continue
-                        # Strip meeting title from beginning if present
-                        if text.startswith(meeting_title):
-                            text = text[len(meeting_title):].lstrip(' \n\t:.-')
-                        if len(text) < 20:
-                            continue
-                        summary = text[:150].strip()
-                        if len(text) > 150:
-                            summary += '...'
-                        break
+            # Show Decisions
+            if decisions:
+                with st.expander(f"Decisions ({len(decisions)})", expanded=True):
+                    for src in decisions[:5]:
+                        content = src.get('decision_content', src.get('content', ''))[:100]
+                        rationale = src.get('rationale', '')[:80]
+                        made_by = src.get('made_by', '')
+                        topic = src.get('topic', '')
 
-                    # Build clean card
-                    date_html = f'<span style="color:#86868b;font-size:0.85rem"> · {date}</span>' if date else ''
-                    summary_html = f'<p style="color:#555;font-size:0.9rem;margin:8px 0 0 0">{summary}</p>' if summary else ''
+                        st.markdown(f"""
+                        <div class='decision-card'>
+                            <strong>{content}</strong>
+                            {f"<br/><small>Rationale: {rationale}...</small>" if rationale else ""}
+                            {f"<br/><small style='color:#666'>By {made_by}</small>" if made_by else ""}
+                            {f" <span style='background:#e3f2fd;padding:2px 6px;border-radius:4px;font-size:0.75rem'>{topic}</span>" if topic else ""}
+                        </div>
+                        """, unsafe_allow_html=True)
 
-                    st.markdown(
-                        f'<div class="source-card"><strong>{meeting_title}</strong>{date_html}{summary_html}</div>',
-                        unsafe_allow_html=True
-                    )
+            # Show Work Orders
+            if work_orders:
+                with st.expander(f"Work Orders ({len(work_orders)})", expanded=False):
+                    for src in work_orders[:5]:
+                        task = src.get('task', src.get('content', ''))[:100]
+                        assigned = src.get('assigned_to', '')
+                        status = src.get('status', '')
 
-    elif (ask_clicked or speak_response) and not question:
+                        status_color = {'completed': '#4caf50', 'in_progress': '#ff9800', 'pending': '#9e9e9e', 'blocked': '#f44336'}
+                        color = status_color.get(status, '#9e9e9e')
+
+                        st.markdown(f"""
+                        <div class='decision-card'>
+                            <strong>{task}</strong>
+                            {f"<br/><small>Assigned to: {assigned}</small>" if assigned else ""}
+                            {f" <span style='background:{color};color:white;padding:2px 6px;border-radius:4px;font-size:0.75rem'>{status}</span>" if status else ""}
+                        </div>
+                        """, unsafe_allow_html=True)
+
+            # Show Artifacts (PRDs, Blueprints, Meetings)
+            if artifacts:
+                with st.expander(f"Artifacts ({len(artifacts)})", expanded=False):
+                    for src in artifacts[:5]:
+                        title = src.get('meeting_title', src.get('title', src.get('meeting_id', 'Unknown')))
+                        date = str(src.get('meeting_date', src.get('date', ''))).split(' ')[0]
+                        content = src.get('content', '')[:120]
+
+                        # Strip title from content if present
+                        if content.startswith(title):
+                            content = content[len(title):].lstrip(' \n\t:.-')[:120]
+
+                        st.markdown(f"""
+                        <div class='source-card'>
+                            <strong>{title}</strong>
+                            {f"<span style='color:#86868b;font-size:0.85rem'> · {date}</span>" if date else ""}
+                            {f"<p style='color:#555;font-size:0.9rem;margin:8px 0 0 0'>{content}...</p>" if content else ""}
+                        </div>
+                        """, unsafe_allow_html=True)
+
+            # Show all sources as raw data
+            with st.expander("Raw Sources", expanded=False):
+                for i, src in enumerate(result.sources[:5]):
+                    st.json(src)
+
+    elif ask_clicked and not question:
         st.info("Enter a question above.")
 
 
