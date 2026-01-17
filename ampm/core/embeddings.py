@@ -100,12 +100,16 @@ class EmbeddingStore:
         self._embeddings: list[list[float]] = []
         self._openai = None
 
+        # Always initialize local OpenAI client as fallback for embeddings
+        if LOCAL_AVAILABLE and os.getenv("OPENAI_API_KEY"):
+            self._openai = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+            print("EmbeddingStore: OpenAI embeddings initialized")
+        
         if use_backboard and self.backboard_api_key:
             print("EmbeddingStore: Using Backboard API")
             self._init_backboard()
-        elif LOCAL_AVAILABLE:
+        elif LOCAL_AVAILABLE and self._openai:
             print("EmbeddingStore: Using local embeddings")
-            self._openai = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
         else:
             print("EmbeddingStore: No embedding backend available")
 
