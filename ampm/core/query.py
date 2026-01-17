@@ -59,15 +59,25 @@ class QueryEngine:
             try:
                 from cerebras.cloud.sdk import Cerebras
                 self.cerebras = Cerebras(api_key=os.getenv("CEREBRAS_API_KEY"))
+                print("QueryEngine: Using Cerebras")
             except ImportError:
                 pass
         
         if not self.cerebras and os.getenv("OPENAI_API_KEY"):
             try:
                 from openai import OpenAI
-                self.openai = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+                import httpx
+                # Set longer timeout for OpenAI client
+                self.openai = OpenAI(
+                    api_key=os.getenv("OPENAI_API_KEY"),
+                    timeout=httpx.Timeout(60.0, connect=10.0)
+                )
+                print("QueryEngine: Using OpenAI")
             except ImportError:
                 pass
+        
+        if not self.cerebras and not self.openai:
+            print("QueryEngine: WARNING - No LLM API available")
 
     def query(self, question: str, top_k: int = 5) -> QueryResult:
         """
@@ -83,13 +93,35 @@ class QueryEngine:
         start_time = time.time()
 
         # Step 1: Semantic search for relevant content
+        print(f"Searching for: {question}")
         search_results = self.embeddings.search(question, top_k=top_k)
+        print(f"Found {len(search_results)} search results")
 
         # Step 2: Enrich with graph context
         enriched_context = self._enrich_with_graph(search_results)
+        print(f"Enriched to {len(enriched_context)} context items")
 
-        # Step 3: Generate answer with Cerebras
+        # If no search results, try to get context from graph directly
+        if not enriched_context:
+            print("No search results, trying graph query...")
+            # Get some decisions as fallback context
+            all_decisions = list(self.graph._decisions.values())[:5]
+            for dec in all_decisions:
+                enriched_context.append({
+                    "id": dec.id,
+                    "content": dec.content,
+                    "decision_content": dec.content,
+                    "rationale": dec.rationale,
+                    "made_by": dec.made_by,
+                    "source_type": "decision",
+                    "meeting_id": dec.meeting_id
+                })
+            print(f"Added {len(enriched_context)} decisions from graph as fallback")
+
+        # Step 3: Generate answer with LLM
+        print("Generating answer...")
         answer, confidence = self._generate_answer(question, enriched_context)
+        print(f"Answer generated with confidence {confidence}")
 
         query_time_ms = (time.time() - start_time) * 1000
 
@@ -185,45 +217,85 @@ Context:
 
 Provide a clear, sourced answer. If the information isn't in the context, say so."""
 
-        try:
-            answer = None
-            
-            # Try Cerebras first
-            if self.cerebras:
-                response = self.cerebras.chat.completions.create(
-                    model="llama-3.3-70b",
-                    messages=[
-                        {"role": "system", "content": system_prompt},
-                        {"role": "user", "content": user_prompt}
-                    ],
-                    max_tokens=500,
-                    temperature=0.7
-                )
-                answer = response.choices[0].message.content
-            
-            # Fall back to OpenAI
-            elif self.openai:
-                response = self.openai.chat.completions.create(
-                    model="gpt-4o-mini",
-                    messages=[
-                        {"role": "system", "content": system_prompt},
-                        {"role": "user", "content": user_prompt}
-                    ],
-                    max_tokens=500,
-                    temperature=0.7
-                )
-                answer = response.choices[0].message.content
-            
-            else:
-                return "No LLM API available. Please set OPENAI_API_KEY or CEREBRAS_API_KEY.", 0.0
+        # Retry logic for resilience
+        max_retries = 2
+        last_error = None
+        
+        for attempt in range(max_retries + 1):
+            try:
+                answer = None
+                
+                # Try Cerebras first
+                if self.cerebras:
+                    response = self.cerebras.chat.completions.create(
+                        model="llama-3.3-70b",
+                        messages=[
+                            {"role": "system", "content": system_prompt},
+                            {"role": "user", "content": user_prompt}
+                        ],
+                        max_tokens=500,
+                        temperature=0.7
+                    )
+                    answer = response.choices[0].message.content
+                
+                # Fall back to OpenAI
+                elif self.openai:
+                    response = self.openai.chat.completions.create(
+                        model="gpt-4o-mini",
+                        messages=[
+                            {"role": "system", "content": system_prompt},
+                            {"role": "user", "content": user_prompt}
+                        ],
+                        max_tokens=500,
+                        temperature=0.7,
+                        timeout=30.0  # 30 second timeout
+                    )
+                    answer = response.choices[0].message.content
+                
+                else:
+                    return "No LLM API available. Please set OPENAI_API_KEY or CEREBRAS_API_KEY.", 0.0
 
-            # Simple confidence based on context availability
-            confidence = min(1.0, len(context) / 3)
-
-            return answer, confidence
-
-        except Exception as e:
-            return f"Error generating answer: {e}", 0.0
+                if answer:
+                    # Simple confidence based on context availability
+                    confidence = min(1.0, len(context) / 3)
+                    return answer, confidence
+                    
+            except Exception as e:
+                last_error = e
+                if attempt < max_retries:
+                    print(f"Retry {attempt + 1}/{max_retries} after error: {e}")
+                    time.sleep(1)  # Brief pause before retry
+                continue
+        
+        # If we have context but LLM failed, provide a basic answer from context
+        if context:
+            # Build a simple answer from context without LLM
+            fallback_parts = ["Based on the meeting records I found:"]
+            
+            for ctx in context[:5]:
+                if ctx.get("decision_content"):
+                    part = f"\n**Decision:** {ctx['decision_content']}"
+                    if ctx.get("rationale"):
+                        part += f"\n  - Rationale: {ctx['rationale']}"
+                    if ctx.get("made_by"):
+                        part += f"\n  - Made by: {ctx['made_by']}"
+                    if ctx.get("meeting_title"):
+                        part += f"\n  - From: {ctx['meeting_title']} ({ctx.get('meeting_date', 'unknown date')})"
+                    fallback_parts.append(part)
+                elif ctx.get("content"):
+                    content = ctx['content'][:300]
+                    if ctx.get("meeting_title"):
+                        fallback_parts.append(f"\n**From {ctx['meeting_title']}:** {content}...")
+                    else:
+                        fallback_parts.append(f"\n{content}...")
+            
+            if len(fallback_parts) > 1:
+                if last_error:
+                    fallback_parts.append(f"\n\n*(Note: LLM synthesis unavailable - showing raw results. Error: {str(last_error)[:100]})*")
+                return "\n".join(fallback_parts), 0.5
+        
+        error_msg = str(last_error) if last_error else "Unknown error"
+        return f"Could not generate answer. Error: {error_msg}", 0.0
 
     def _format_context(self, context: list[dict]) -> str:
         """Format context for the LLM prompt."""

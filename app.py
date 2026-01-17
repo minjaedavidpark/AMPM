@@ -279,53 +279,136 @@ def render_sidebar(loader):
 
 
 def render_ask_tab(engine: QueryEngine):
-    """Render the Ask Questions tab."""
+    """Render the Ask Questions tab with voice support."""
     st.markdown("### 🔍 Ask a Question")
     st.markdown("Ask about decisions, action items, blockers, or any meeting context.")
     
-    # Query input
-    question = st.text_input(
-        "Your question:",
-        placeholder="e.g., Why did we choose Stripe for payments?",
-        key="question_input"
+    # Check for ElevenLabs API key
+    has_elevenlabs = bool(os.getenv("ELEVENLABS_API_KEY"))
+    
+    # Input mode selection
+    input_mode = st.radio(
+        "Input method:",
+        ["⌨️ Type", "🎤 Voice"],
+        horizontal=True,
+        key="input_mode"
     )
     
-    if st.button("Ask AMPM", type="primary"):
-        if question:
-            with st.spinner("Searching meeting knowledge..."):
-                start_time = time.time()
-                result = engine.query(question)
-                elapsed = time.time() - start_time
+    question = None
+    
+    if input_mode == "🎤 Voice":
+        # Voice input mode
+        audio_input = st.audio_input("Click to record your question", key="voice_input")
+        
+        if audio_input:
+            st.audio(audio_input, format="audio/wav")
             
-            # Show timing
-            st.markdown(f"<span class='timing-badge'>Answered in {elapsed:.2f}s</span>", unsafe_allow_html=True)
-            
-            # Show answer
-            st.markdown("### Answer")
-            st.markdown(result.answer)
-            
-            # Show confidence
-            confidence = result.confidence
-            confidence_color = "green" if confidence > 0.7 else "orange" if confidence > 0.4 else "red"
-            st.markdown(f"**Confidence:** :{confidence_color}[{confidence:.0%}]")
-            
-            # Show sources
-            if result.sources:
-                st.markdown("### 📚 Sources")
-                for source in result.sources[:5]:
-                    # Sources are dicts
-                    meeting_title = source.get('meeting_title', source.get('meeting_id', 'Unknown'))
-                    date = source.get('date', 'Unknown date')
-                    content_type = source.get('type', 'content')
-                    content = source.get('content', source.get('text', ''))[:150]
-                    st.markdown(f"""
-                    <div class='source-card'>
-                        <strong>{meeting_title}</strong> ({date})<br/>
-                        <em>{content_type}</em>: {content}...
-                    </div>
-                    """, unsafe_allow_html=True)
+            if st.button("🎯 Transcribe & Ask", type="primary"):
+                with st.spinner("Transcribing audio..."):
+                    try:
+                        from openai import OpenAI
+                        client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+                        
+                        import tempfile
+                        with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as f:
+                            f.write(audio_input.getvalue())
+                            temp_path = f.name
+                        
+                        with open(temp_path, "rb") as audio_file:
+                            transcript = client.audio.transcriptions.create(
+                                model="whisper-1",
+                                file=audio_file,
+                                language="en"
+                            )
+                        
+                        os.unlink(temp_path)
+                        question = transcript.text
+                        st.markdown(f"**Transcribed:** *{question}*")
+                        
+                    except Exception as e:
+                        st.error(f"Transcription failed: {e}")
+                        return
+    else:
+        # Text input mode
+        question = st.text_input(
+            "Your question:",
+            placeholder="e.g., Why did we choose Stripe for payments?",
+            key="question_input"
+        )
+        
+        if st.button("Ask AMPM", type="primary"):
+            if not question:
+                st.warning("Please enter a question.")
+                return
         else:
-            st.warning("Please enter a question.")
+            question = None  # Don't process unless button clicked
+    
+    # Voice response option
+    col1, col2 = st.columns([3, 1])
+    with col2:
+        speak_response = st.checkbox(
+            "🔊 Voice response",
+            value=False,
+            disabled=not has_elevenlabs,
+            help="Enable ElevenLabs to hear the answer" if has_elevenlabs else "Add ELEVENLABS_API_KEY to .env"
+        )
+    
+    # Process the question
+    if question:
+        with st.spinner("Searching meeting knowledge..."):
+            start_time = time.time()
+            result = engine.query(question)
+            elapsed = time.time() - start_time
+        
+        # Show timing
+        st.markdown(f"<span class='timing-badge'>Answered in {elapsed:.2f}s</span>", unsafe_allow_html=True)
+        
+        # Show answer
+        st.markdown("### Answer")
+        st.markdown(result.answer)
+        
+        # Generate voice response if enabled
+        if speak_response and has_elevenlabs:
+            with st.spinner("Generating voice response..."):
+                try:
+                    from elevenlabs import ElevenLabs
+                    
+                    elevenlabs = ElevenLabs(api_key=os.getenv("ELEVENLABS_API_KEY"))
+                    voice_id = os.getenv("ELEVENLABS_VOICE_ID", "21m00Tcm4TlvDq8ikWAM")
+                    
+                    audio_generator = elevenlabs.text_to_speech.convert(
+                        text=result.answer,
+                        voice_id=voice_id,
+                        model_id="eleven_turbo_v2_5",
+                        output_format="mp3_44100_128"
+                    )
+                    
+                    audio_bytes = b"".join(audio_generator)
+                    st.audio(audio_bytes, format="audio/mp3", autoplay=True)
+                    
+                except Exception as e:
+                    st.error(f"Voice generation failed: {e}")
+        
+        # Show confidence
+        confidence = result.confidence
+        confidence_color = "green" if confidence > 0.7 else "orange" if confidence > 0.4 else "red"
+        st.markdown(f"**Confidence:** :{confidence_color}[{confidence:.0%}]")
+        
+        # Show sources
+        if result.sources:
+            st.markdown("### 📚 Sources")
+            for source in result.sources[:5]:
+                meeting_title = source.get('meeting_title', source.get('meeting_id', 'Unknown'))
+                date = source.get('date', 'Unknown date')
+                content_type = source.get('type', 'content')
+                content = source.get('content', source.get('text', ''))[:150]
+                st.markdown(f"""
+                <div class='source-card'>
+                    <strong>{meeting_title}</strong> ({date})<br/>
+                    <em>{content_type}</em>: {content}...
+                </div>
+                """, unsafe_allow_html=True)
+
 
 
 def render_decisions_tab(loader):

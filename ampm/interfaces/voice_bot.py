@@ -51,7 +51,11 @@ class VoiceBot:
 
         # Initialize API clients
         self.openai = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-        self.elevenlabs = ElevenLabs(api_key=os.getenv("ELEVENLABS_API_KEY"))
+        
+        # ElevenLabs is optional
+        self.elevenlabs = None
+        if os.getenv("ELEVENLABS_API_KEY"):
+            self.elevenlabs = ElevenLabs(api_key=os.getenv("ELEVENLABS_API_KEY"))
 
         # Initialize memory system
         self.graph = MeetingGraph()
@@ -80,13 +84,16 @@ class VoiceBot:
 
     def _validate_keys(self):
         """Check that all required API keys are present."""
-        required = ["OPENAI_API_KEY", "CEREBRAS_API_KEY", "ELEVENLABS_API_KEY"]
-        missing = [key for key in required if not os.getenv(key)]
-        if missing:
+        # OpenAI is required for Whisper STT
+        if not os.getenv("OPENAI_API_KEY"):
             raise ValueError(
-                f"Missing API keys: {', '.join(missing)}\n"
+                "Missing OPENAI_API_KEY\n"
                 "Copy .env.example to .env and add your keys."
             )
+        
+        # ElevenLabs is required for TTS (optional - will skip TTS if not set)
+        if not os.getenv("ELEVENLABS_API_KEY"):
+            print("Warning: ELEVENLABS_API_KEY not set - TTS will be disabled")
 
     def _record_audio(self, duration: float = RECORD_SECONDS) -> np.ndarray:
         """Record audio from microphone."""
@@ -160,12 +167,16 @@ class VoiceBot:
 
         return result.answer
 
-    def _speak(self, text: str):
-        """Convert text to speech and play it."""
+    def _speak(self, text: str) -> Optional[bytes]:
+        """Convert text to speech and play it. Returns audio bytes if available."""
         print(f"\nAMPM: {text}\n")
         self.is_speaking = True
 
         try:
+            if not self.elevenlabs:
+                print("(TTS disabled - no ELEVENLABS_API_KEY)")
+                return None
+                
             audio = self.elevenlabs.text_to_speech.convert(
                 text=text,
                 voice_id=self.voice_id,
@@ -173,10 +184,31 @@ class VoiceBot:
                 output_format="mp3_44100_128"
             )
             play(audio)
+            return audio
         except Exception as e:
             print(f"TTS Error: {e}")
+            return None
         finally:
             self.is_speaking = False
+    
+    def text_to_speech(self, text: str) -> Optional[bytes]:
+        """Convert text to speech and return audio bytes (no playback)."""
+        if not self.elevenlabs:
+            return None
+            
+        try:
+            audio_generator = self.elevenlabs.text_to_speech.convert(
+                text=text,
+                voice_id=self.voice_id,
+                model_id="eleven_turbo_v2_5",
+                output_format="mp3_44100_128"
+            )
+            # Convert generator to bytes
+            audio_bytes = b"".join(audio_generator)
+            return audio_bytes
+        except Exception as e:
+            print(f"TTS Error: {e}")
+            return None
 
     def ask(self, question: str) -> str:
         """
