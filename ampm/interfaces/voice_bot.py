@@ -4,6 +4,11 @@ Voice Bot Interface
 Local voice bot using microphone and speakers.
 
 Flow: Microphone → OpenAI Whisper → Memory Query → ElevenLabs TTS → Speaker
+
+Features:
+- Continuous listening without requiring Enter
+- Interruption handling: say "Hey Parrot" to ask new question, "stop" to stop, "thank you" for acknowledgment
+- Natural, friendly responses
 """
 
 import os
@@ -11,6 +16,9 @@ import io
 import time
 import tempfile
 import wave
+import threading
+import queue
+import random
 from typing import Optional, Tuple
 
 import sounddevice as sd
@@ -28,9 +36,27 @@ from ..ingest.loader import MeetingLoader
 SAMPLE_RATE = 16000
 CHANNELS = 1
 RECORD_SECONDS = 5
+INTERRUPT_RECORD_SECONDS = 2  # Shorter recordings during speech for faster interrupt detection
 
-# Wake words that activate the bot
-WAKE_WORDS = ["hey parrot", "parrot,", "parrot ", "hey par rot", "hey par", "parrot"]
+# Wake words that activate the bot (all start with "hey par...")
+WAKE_WORDS = ["hey parrot", "hey par rot", "hey par", "hey parrot,", "hey parrot "]
+
+# Stop phrases (all start with "hey par...")
+STOP_PHRASES = ["hey parrot stop", "hey parrot, stop", "hey par stop", "hey parrot be quiet", "hey parrot shut up"]
+
+# Thank you phrases (all start with "hey par...")
+THANK_YOU_PHRASES = ["hey parrot thank you", "hey parrot thanks", "hey parrot, thank you", "hey parrot, thanks", "hey par thank you", "hey par thanks"]
+
+# Friendly acknowledgment responses
+ACKNOWLEDGMENT_RESPONSES = [
+    "You're welcome!",
+    "Happy to help!",
+    "Anytime!",
+    "Of course!",
+    "Glad I could help!",
+    "No problem at all!",
+    "You got it!",
+]
 
 
 class VoiceBot:
@@ -38,6 +64,11 @@ class VoiceBot:
     Voice-activated bot for querying meeting memory.
 
     Say "Hey Parrot" followed by your question.
+
+    Interruption handling:
+    - Say "Hey Parrot" with a new question to interrupt and ask something else
+    - Say "stop" to stop the current response
+    - Say "thank you" to get a friendly acknowledgment
     """
 
     def __init__(self, data_path: Optional[str] = None):
@@ -51,7 +82,7 @@ class VoiceBot:
 
         # Initialize API clients
         self.openai = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-        
+
         # ElevenLabs is optional
         self.elevenlabs = None
         if os.getenv("ELEVENLABS_API_KEY"):
@@ -74,6 +105,10 @@ class VoiceBot:
 
         # State
         self.is_speaking = False
+        self.should_stop_speaking = False
+        self.interrupt_queue = queue.Queue()
+        self.listening_thread = None
+        self.stop_listening = False
 
         # Voice settings
         self.voice_id = os.getenv("ELEVENLABS_VOICE_ID", "21m00Tcm4TlvDq8ikWAM")
@@ -155,6 +190,78 @@ class VoiceBot:
 
         return False, ""
 
+    def _detect_stop_phrase(self, text: str) -> bool:
+        """Check if text contains a stop phrase."""
+        text_lower = text.lower().strip()
+        for phrase in STOP_PHRASES:
+            if phrase in text_lower:
+                return True
+        return False
+
+    def _detect_thank_you(self, text: str) -> bool:
+        """Check if text contains a thank you phrase."""
+        text_lower = text.lower().strip()
+        for phrase in THANK_YOU_PHRASES:
+            if phrase in text_lower:
+                return True
+        return False
+
+    def _get_acknowledgment_response(self) -> str:
+        """Get a random friendly acknowledgment response."""
+        return random.choice(ACKNOWLEDGMENT_RESPONSES)
+
+    def _background_listen(self):
+        """Background listening thread that runs while bot is speaking."""
+        while not self.stop_listening and self.is_speaking:
+            try:
+                # Record shorter clips for faster interrupt detection
+                audio = sd.rec(
+                    int(INTERRUPT_RECORD_SECONDS * SAMPLE_RATE),
+                    samplerate=SAMPLE_RATE,
+                    channels=CHANNELS,
+                    dtype='int16'
+                )
+                sd.wait()
+
+                # Check audio level
+                audio_level = np.abs(audio).mean()
+                if audio_level < 50:
+                    continue  # Skip silence
+
+                # Transcribe
+                transcript = self._transcribe(audio)
+                if not transcript.strip():
+                    continue
+
+                transcript_lower = transcript.lower().strip()
+                print(f"\n[Background heard: \"{transcript}\"]")
+
+                # Check for stop phrases
+                if self._detect_stop_phrase(transcript):
+                    print("[Stop detected!]")
+                    self.should_stop_speaking = True
+                    self.interrupt_queue.put(("stop", None))
+                    break
+
+                # Check for thank you
+                if self._detect_thank_you(transcript):
+                    print("[Thank you detected!]")
+                    self.should_stop_speaking = True
+                    self.interrupt_queue.put(("thank_you", None))
+                    break
+
+                # Check for new question (wake word)
+                detected, question = self._detect_wake_word(transcript)
+                if detected and question:
+                    print(f"[New question detected: \"{question}\"]")
+                    self.should_stop_speaking = True
+                    self.interrupt_queue.put(("new_question", question))
+                    break
+
+            except Exception as e:
+                # Ignore errors in background thread
+                pass
+
     def _query(self, question: str) -> str:
         """Query the meeting memory."""
         print("Thinking...", end=" ", flush=True)
@@ -167,29 +274,62 @@ class VoiceBot:
 
         return result.answer
 
-    def _speak(self, text: str) -> Optional[bytes]:
-        """Convert text to speech and play it. Returns audio bytes if available."""
+    def _speak(self, text: str, allow_interrupts: bool = True) -> Optional[bytes]:
+        """
+        Convert text to speech and play it with interrupt handling.
+
+        Args:
+            text: Text to speak
+            allow_interrupts: If True, listen for interrupts while speaking
+
+        Returns:
+            Audio bytes if available
+        """
         print(f"\nParrot: {text}\n")
         self.is_speaking = True
+        self.should_stop_speaking = False
+
+        # Clear the interrupt queue
+        while not self.interrupt_queue.empty():
+            try:
+                self.interrupt_queue.get_nowait()
+            except queue.Empty:
+                break
 
         try:
             if not self.elevenlabs:
                 print("(TTS disabled - no ELEVENLABS_API_KEY)")
                 return None
-                
+
+            # Start background listening thread if interrupts are allowed
+            if allow_interrupts:
+                self.stop_listening = False
+                self.listening_thread = threading.Thread(target=self._background_listen, daemon=True)
+                self.listening_thread.start()
+
+            # Generate and play audio
             audio = self.elevenlabs.text_to_speech.convert(
                 text=text,
                 voice_id=self.voice_id,
                 model_id="eleven_turbo_v2_5",
                 output_format="mp3_44100_128"
             )
-            play(audio)
+
+            # Play audio (note: elevenlabs.play is blocking, so we can't easily interrupt mid-playback)
+            # For true mid-speech interruption, we'd need to use streaming playback
+            if not self.should_stop_speaking:
+                play(audio)
+
             return audio
+
         except Exception as e:
             print(f"TTS Error: {e}")
             return None
         finally:
             self.is_speaking = False
+            self.stop_listening = True
+            if self.listening_thread:
+                self.listening_thread.join(timeout=1.0)
     
     def text_to_speech(self, text: str) -> Optional[bytes]:
         """Convert text to speech and return audio bytes (no playback)."""
@@ -246,10 +386,38 @@ class VoiceBot:
         print("  - 'Hey Parrot, why did we choose Stripe?'")
         print("  - 'Parrot, what happened with Legal approval?'")
         print("  - 'Hey Parrot, who made the checkout decision?'")
+        print("\nInterruption commands (while Parrot is speaking):")
+        print("  - 'Hey Parrot, [new question]' - ask a new question")
+        print("  - 'Hey Parrot, stop' - stop the current response")
+        print("  - 'Hey Parrot, thank you' - get a friendly acknowledgment")
         print("\nPress Ctrl+C to stop.\n")
+
+        pending_question = None
 
         try:
             while True:
+                # Check if there's a pending question from an interrupt
+                if pending_question:
+                    question = pending_question
+                    pending_question = None
+                    print(f"Question: \"{question}\"")
+                    response = self._query(question)
+                    self._speak(response)
+
+                    # Check for any interrupts that happened during speech
+                    try:
+                        interrupt_type, interrupt_data = self.interrupt_queue.get_nowait()
+                        if interrupt_type == "new_question":
+                            pending_question = interrupt_data
+                        elif interrupt_type == "thank_you":
+                            acknowledgment = self._get_acknowledgment_response()
+                            self._speak(acknowledgment, allow_interrupts=False)
+                    except queue.Empty:
+                        pass
+
+                    print("")  # Blank line after response
+                    continue
+
                 print("Listening...", end=" ", flush=True)
 
                 audio = self._record_audio()
@@ -268,12 +436,32 @@ class VoiceBot:
 
                 print(f"Heard: \"{transcript}\"")
 
+                # Check for thank you first (standalone, not during speech)
+                if self._detect_thank_you(transcript):
+                    acknowledgment = self._get_acknowledgment_response()
+                    self._speak(acknowledgment, allow_interrupts=False)
+                    print("")
+                    continue
+
+                # Check for wake word
                 detected, question = self._detect_wake_word(transcript)
 
                 if detected:
                     print(f"Question: \"{question}\"")
                     response = self._query(question)
                     self._speak(response)
+
+                    # Check for any interrupts that happened during speech
+                    try:
+                        interrupt_type, interrupt_data = self.interrupt_queue.get_nowait()
+                        if interrupt_type == "new_question":
+                            pending_question = interrupt_data
+                        elif interrupt_type == "thank_you":
+                            acknowledgment = self._get_acknowledgment_response()
+                            self._speak(acknowledgment, allow_interrupts=False)
+                    except queue.Empty:
+                        pass
+
                     print("")  # Blank line after response
                 else:
                     print("(no wake word)\n")

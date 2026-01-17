@@ -6,6 +6,11 @@ Bot that joins Google Meet and responds to questions.
 Two modes:
 - DemoMeetBot: Type questions in terminal, bot speaks in meeting
 - MeetBot: Live audio - listens to meeting and responds
+
+Features:
+- Continuous listening without requiring Enter
+- Interruption handling: say "Hey Parrot" to ask new question, "stop" to stop, "thank you" for acknowledgment
+- Natural, friendly responses
 """
 
 import os
@@ -16,6 +21,9 @@ import tempfile
 import wave
 import io
 import base64
+import threading
+import queue
+import random
 from pathlib import Path
 from typing import Optional
 
@@ -41,13 +49,30 @@ from ..ingest.loader import MeetingLoader
 SAMPLE_RATE = 16000
 CHANNELS = 1
 RECORD_SECONDS = 6
+INTERRUPT_RECORD_SECONDS = 2  # Shorter recordings during speech for faster interrupt detection
 
 # Browser profile directory
 PROFILE_DIR = Path(__file__).parent.parent.parent / ".browser_profile"
 
-# Wake words
-# WAKE_WORDS = ["hey ampm", "ampm,", "ampm ", "hey am pm", "hey amp", "a]mpm"]
-WAKE_WORDS = ["hey parrot", "parrot,", "parrot ", "hey parrot pm", "hey parrot", "a]parrot"]
+# Wake words (all start with "hey par...")
+WAKE_WORDS = ["hey parrot", "hey par rot", "hey par", "hey parrot,", "hey parrot "]
+
+# Stop phrases (all start with "hey par...")
+STOP_PHRASES = ["hey parrot stop", "hey parrot, stop", "hey par stop", "hey parrot be quiet", "hey parrot shut up"]
+
+# Thank you phrases (all start with "hey par...")
+THANK_YOU_PHRASES = ["hey parrot thank you", "hey parrot thanks", "hey parrot, thank you", "hey parrot, thanks", "hey par thank you", "hey par thanks"]
+
+# Friendly acknowledgment responses
+ACKNOWLEDGMENT_RESPONSES = [
+    "You're welcome!",
+    "Happy to help!",
+    "Anytime!",
+    "Of course!",
+    "Glad I could help!",
+    "No problem at all!",
+    "You got it!",
+]
 
 
 class DemoMeetBot:
@@ -368,6 +393,11 @@ class MeetBot:
     Requires virtual audio routing (e.g., BlackHole on macOS).
 
     Uses Backboard API for persistent memory across sessions.
+
+    Interruption handling:
+    - Say "Hey Parrot" with a new question to interrupt and ask something else
+    - Say "stop" to stop the current response
+    - Say "thank you" to get a friendly acknowledgment
     """
 
     def __init__(
@@ -397,6 +427,12 @@ class MeetBot:
         self.last_spoken_audio = None  # Store last spoken audio for echo detection
         self.last_speak_time = 0  # Track when bot last spoke
         self.audio_context_initialized = False  # Track if audio context is set up
+
+        # Interrupt handling state
+        self.should_stop_speaking = False
+        self.interrupt_queue = queue.Queue()
+        self.listening_thread = None
+        self.stop_listening = False
 
         # Initialize memory system with persistence
         config_dir = str(PROFILE_DIR.parent / ".ampm")
@@ -524,24 +560,18 @@ class MeetBot:
         print("\n" + "=" * 60)
         print("Parrot is ready!")
         print("=" * 60)
-        print("\n🎤 Audio Setup")
-        print("=" * 60)
-        print("\nLISTENING:")
-        print("  • Bot will try to capture from Google Meet tab")
-        print("  • Falls back to system microphone if needed")
-        print("  • Make sure your mic can hear the meeting:")
-        print("    - If using speakers: Mic should pick up meeting audio")
-        print("    - If using headphones: Use headphones with mic")
-        print("\nSPEAKING:")
-        print("  • Bot uses BlackHole to inject audio into Google Meet")
-        print("  • Make sure:")
-        print("    1. System Output = Multi-Output Device (with BlackHole)")
-        print("    2. Bot's Google Meet → Settings → Microphone = BlackHole 2ch")
-        print("\n💡 TIPS:")
-        print("  • Speak clearly: 'Hey Parrot' followed by your question")
-        print("  • Wait 4 seconds after bot speaks (prevents echo)")
-        print("  • Use headphones to prevent echo")
-        print("\nExample: 'Hey Parrot, why did we choose Stripe?'")
+        print("\nSay 'Hey Parrot' followed by your question.")
+        print("Examples:")
+        print("  - 'Hey Parrot, why did we choose Stripe?'")
+        print("  - 'Parrot, what happened with Legal approval?'")
+        print("  - 'Hey Parrot, who made the checkout decision?'")
+        print("\nInterruption commands (while Parrot is speaking):")
+        print("  - 'Hey Parrot, [new question]' - ask a new question")
+        print("  - 'Hey Parrot, stop' - stop the current response")
+        print("  - 'Hey Parrot, thank you' - get a friendly acknowledgment")
+        print("\nAudio Setup:")
+        print("  - Speak clearly and use headphones to prevent echo")
+        print("  - Bot uses BlackHole for audio routing")
         print("\nPress Ctrl+C to leave.\n")
 
     async def _setup_meeting_audio_capture(self):
@@ -686,25 +716,44 @@ class MeetBot:
 
     async def _listen_loop(self):
         """Continuously listen for questions from Google Meet."""
+        pending_question = None
+
         while self.is_listening:
             if self.is_speaking:
                 await asyncio.sleep(0.5)
                 continue
 
             try:
+                # Check for pending question from interrupt
+                if pending_question:
+                    question = pending_question
+                    pending_question = None
+                    print(f"Question: \"{question}\"")
+                    interrupt = await self._respond(question)
+
+                    # Handle any interrupt that occurred during response
+                    if interrupt:
+                        interrupt_type, interrupt_data = interrupt
+                        if interrupt_type == "new_question":
+                            pending_question = interrupt_data
+                        elif interrupt_type == "thank_you":
+                            acknowledgment = self._get_acknowledgment_response()
+                            await self._speak_simple(acknowledgment)
+                    continue
+
                 print("Listening...", end=" ", flush=True)
 
                 # Try to capture from meeting first, fallback to system mic
                 audio = await self._capture_meeting_audio()
                 using_meeting_audio = audio is not None
-                
+
                 if audio is None:
                     # Fallback to system mic
                     audio = await asyncio.get_event_loop().run_in_executor(
                         None, self._record_audio
                     )
                     using_meeting_audio = False
-                
+
                 # Quick check: if all zeros, skip transcription
                 if audio is None or len(audio) == 0 or np.all(audio == 0):
                     print("(no audio detected)")
@@ -728,7 +777,7 @@ class MeetBot:
                 if audio_level < threshold:
                     print("(silence - audio too quiet)")
                     continue
-                
+
                 # Additional echo check: if audio is very loud right after speaking, skip it
                 if time_since_speak < 6.0 and audio_level > 5000:
                     print("(skipping - likely echo, too loud too soon)")
@@ -740,11 +789,27 @@ class MeetBot:
 
                 if transcript.strip():
                     print(f"Heard: \"{transcript}\"")
+
+                    # Check for thank you first (standalone)
+                    if self._detect_thank_you(transcript):
+                        acknowledgment = self._get_acknowledgment_response()
+                        await self._speak_simple(acknowledgment)
+                        continue
+
                     detected, question = self._detect_wake_word(transcript)
 
                     if detected:
-                        print(f"\n✅ Wake word detected! Question: \"{question}\"")
-                        await self._respond(question)
+                        print(f"\nWake word detected! Question: \"{question}\"")
+                        interrupt = await self._respond(question)
+
+                        # Handle any interrupt that occurred during response
+                        if interrupt:
+                            interrupt_type, interrupt_data = interrupt
+                            if interrupt_type == "new_question":
+                                pending_question = interrupt_data
+                            elif interrupt_type == "thank_you":
+                                acknowledgment = self._get_acknowledgment_response()
+                                await self._speak_simple(acknowledgment)
                     else:
                         print(" (no wake word)")
                 else:
@@ -757,6 +822,34 @@ class MeetBot:
                 import traceback
                 traceback.print_exc()
                 await asyncio.sleep(1)
+
+    async def _speak_simple(self, text: str):
+        """Speak a simple response (e.g., acknowledgment) without interrupt handling."""
+        self.is_speaking = True
+        print(f"\nParrot: {text}\n")
+
+        try:
+            # Generate TTS audio
+            audio_generator = self.elevenlabs.text_to_speech.convert(
+                text=text,
+                voice_id=self.voice_id,
+                model_id="eleven_turbo_v2_5",
+                output_format="mp3_44100_128"
+            )
+            audio_bytes = b''.join(audio_generator)
+
+            # Unmute and play
+            await self._set_mic_muted(False)
+            await asyncio.sleep(0.3)
+            await self._inject_audio_to_meeting(audio_bytes)
+            await asyncio.sleep(1.0)
+            await self._set_mic_muted(True)
+            self.last_speak_time = time.time()
+
+        except Exception as e:
+            print(f"TTS Error: {e}")
+        finally:
+            self.is_speaking = False
 
     async def _set_mic_muted(self, muted: bool):
         """
@@ -930,13 +1023,13 @@ class MeetBot:
     def _detect_wake_word(self, text: str) -> tuple:
         """Check for wake word with improved detection."""
         text_lower = text.lower().strip()
-        
+
         # Remove common transcription errors
         text_lower = text_lower.replace("hey parrot par", "hey parrot")
         text_lower = text_lower.replace("hey parrot", "hey parrot")
         text_lower = text_lower.replace("parrot parrot", "parrot")
         text_lower = text_lower.replace("part", "parrot")
-        
+
         # Check for wake words (more flexible matching)
         for wake in WAKE_WORDS:
             # Try exact match first
@@ -944,7 +1037,7 @@ class MeetBot:
                 idx = text_lower.find(wake)
                 question = text[idx + len(wake):].strip().lstrip(",.:;!? ")
                 return True, question if question else text
-            
+
             # Try fuzzy match (wake word might be split)
             wake_parts = wake.split()
             if len(wake_parts) > 1:
@@ -957,16 +1050,96 @@ class MeetBot:
                         all_found = False
                         break
                     last_idx = idx
-                
+
                 if all_found:
                     question = text[last_idx + len(wake_parts[-1]):].strip().lstrip(",.:;!? ")
                     return True, question if question else text
-        
+
         return False, ""
 
-    async def _respond(self, question: str):
-        """Generate and speak response with ripple detection and follow-up support."""
+    def _detect_stop_phrase(self, text: str) -> bool:
+        """Check if text contains a stop phrase."""
+        text_lower = text.lower().strip()
+        for phrase in STOP_PHRASES:
+            if phrase in text_lower:
+                return True
+        return False
+
+    def _detect_thank_you(self, text: str) -> bool:
+        """Check if text contains a thank you phrase."""
+        text_lower = text.lower().strip()
+        for phrase in THANK_YOU_PHRASES:
+            if phrase in text_lower:
+                return True
+        return False
+
+    def _get_acknowledgment_response(self) -> str:
+        """Get a random friendly acknowledgment response."""
+        return random.choice(ACKNOWLEDGMENT_RESPONSES)
+
+    def _background_listen_sync(self):
+        """Background listening (sync) that runs while bot is speaking."""
+        while not self.stop_listening and self.is_speaking:
+            try:
+                # Record shorter clips for faster interrupt detection
+                audio = sd.rec(
+                    int(INTERRUPT_RECORD_SECONDS * SAMPLE_RATE),
+                    samplerate=SAMPLE_RATE,
+                    channels=CHANNELS,
+                    dtype='int16'
+                )
+                sd.wait()
+
+                # Check audio level
+                audio_level = np.abs(audio).mean()
+                if audio_level < 50:
+                    continue  # Skip silence
+
+                # Transcribe
+                transcript = self._transcribe(audio)
+                if not transcript.strip():
+                    continue
+
+                print(f"\n[Background heard: \"{transcript}\"]")
+
+                # Check for stop phrases
+                if self._detect_stop_phrase(transcript):
+                    print("[Stop detected!]")
+                    self.should_stop_speaking = True
+                    self.interrupt_queue.put(("stop", None))
+                    break
+
+                # Check for thank you
+                if self._detect_thank_you(transcript):
+                    print("[Thank you detected!]")
+                    self.should_stop_speaking = True
+                    self.interrupt_queue.put(("thank_you", None))
+                    break
+
+                # Check for new question (wake word)
+                detected, question = self._detect_wake_word(transcript)
+                if detected and question:
+                    print(f"[New question detected: \"{question}\"]")
+                    self.should_stop_speaking = True
+                    self.interrupt_queue.put(("new_question", question))
+                    break
+
+            except Exception as e:
+                # Ignore errors in background thread
+                pass
+
+    async def _respond(self, question: str, allow_interrupts: bool = True):
+        """Generate and speak response with ripple detection, follow-up support, and interruption handling."""
         self.is_speaking = True
+        self.should_stop_speaking = False
+
+        # Clear the interrupt queue
+        while not self.interrupt_queue.empty():
+            try:
+                self.interrupt_queue.get_nowait()
+            except queue.Empty:
+                break
+
         print("Thinking...", end=" ", flush=True)
         start_time = time.time()
 
@@ -1018,9 +1191,15 @@ class MeetBot:
 
             print(f"\nParrot: {answer}\n")
 
+            # Start background listening for interrupts
+            if allow_interrupts:
+                self.stop_listening = False
+                self.listening_thread = threading.Thread(target=self._background_listen_sync, daemon=True)
+                self.listening_thread.start()
+
             print("Speaking into meeting...", end=" ", flush=True)
             tts_start = time.time()
-            
+
             # Generate TTS audio (returns generator, need to convert to bytes)
             audio_generator = self.elevenlabs.text_to_speech.convert(
                 text=answer,
@@ -1028,44 +1207,53 @@ class MeetBot:
                 model_id="eleven_turbo_v2_5",
                 output_format="mp3_44100_128"
             )
-            
+
             # Convert generator to bytes
             audio_bytes = b''.join(audio_generator)
-            
+
             # Store audio and time for echo detection
             self.last_spoken_audio = audio_bytes
             self.last_speak_time = time.time()
-            
+
             # CRITICAL: Unmute mic in Google Meet BEFORE playing audio
-            print("\n🔓 Unmuting bot's mic in Google Meet...")
+            print("\nUnmuting bot's mic in Google Meet...")
             await self._set_mic_muted(False)
             await asyncio.sleep(0.5)  # Wait for unmute to take effect
-            
+
             # Verify unmute worked
             is_muted = await self._check_mic_muted()
             if is_muted:
-                print("⚠️  WARNING: Bot's mic is still muted! Audio won't be heard in meeting.")
-                print("   → Manually unmute the bot in Google Meet, then try again")
+                print("WARNING: Bot's mic is still muted! Audio won't be heard in meeting.")
+                print("   -> Manually unmute the bot in Google Meet, then try again")
             else:
-                print("✓ Bot's mic is unmuted")
-            
-            # Inject audio into Google Meet
-            audio_duration = await self._inject_audio_to_meeting(audio_bytes)
-            
-            # Wait for audio to finish playing (with buffer)
-            await asyncio.sleep(audio_duration + 0.5)
-            
+                print("Bot's mic is unmuted")
+
+            # Inject audio into Google Meet (check for interrupts)
+            if not self.should_stop_speaking:
+                audio_duration = await self._inject_audio_to_meeting(audio_bytes)
+
+                # Wait for audio to finish playing (with buffer)
+                await asyncio.sleep(audio_duration + 0.5)
+            else:
+                print("[Speech interrupted]")
+
             # Mute mic again after speaking
-            print("🔇 Muting bot's mic...")
+            print("Muting bot's mic...")
             await self._set_mic_muted(True)
             await asyncio.sleep(0.3)
-            
+
             # Wait a bit more before resuming listening (echo prevention)
             await asyncio.sleep(1.0)
-            
+
             tts_time = time.time() - tts_start
             total_time = time.time() - start_time
             print(f"Done! (Total: {total_time:.2f}s)")
+
+            # Return any pending interrupt
+            try:
+                return self.interrupt_queue.get_nowait()
+            except queue.Empty:
+                return None
 
         except Exception as e:
             print(f"Error: {e}")
@@ -1076,8 +1264,12 @@ class MeetBot:
                 await self._set_mic_muted(True)
             except:
                 pass
+            return None
         finally:
             self.is_speaking = False
+            self.stop_listening = True
+            if self.listening_thread:
+                self.listening_thread.join(timeout=1.0)
             print("Listening again...\n")
 
     def _handle_ripple_query(self, question: str) -> str:
