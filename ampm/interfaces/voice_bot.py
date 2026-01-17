@@ -237,7 +237,7 @@ class VoiceBot:
         return response
 
     def run(self):
-        """Main run loop - record, transcribe, respond."""
+        """Main run loop - continuously listen, transcribe, respond."""
         print("\n" + "=" * 50)
         print("Parrot Voice Bot - Ready!")
         print("=" * 50)
@@ -246,20 +246,27 @@ class VoiceBot:
         print("  - 'Hey Parrot, why did we choose Stripe?'")
         print("  - 'Parrot, what happened with Legal approval?'")
         print("  - 'Hey Parrot, who made the checkout decision?'")
-        print("\nPress Ctrl+C to stop.")
-        print("Press Enter to start recording...\n")
+        print("\nPress Ctrl+C to stop.\n")
 
         try:
             while True:
-                input(">>> Press Enter to record your question...")
+                print("Listening...", end=" ", flush=True)
 
                 audio = self._record_audio()
+
+                # Skip if audio is too quiet (silence)
+                audio_level = np.abs(audio).mean()
+                if audio_level < 50:
+                    print("(silence)")
+                    continue
+
                 transcript = self._transcribe(audio)
-                print(f"Heard: \"{transcript}\"")
 
                 if not transcript.strip():
-                    print("(No speech detected)\n")
+                    print("(no speech)")
                     continue
+
+                print(f"Heard: \"{transcript}\"")
 
                 detected, question = self._detect_wake_word(transcript)
 
@@ -267,8 +274,9 @@ class VoiceBot:
                     print(f"Question: \"{question}\"")
                     response = self._query(question)
                     self._speak(response)
+                    print("")  # Blank line after response
                 else:
-                    print("(No wake word detected. Say 'Hey Parrot' followed by your question)\n")
+                    print("(no wake word)\n")
 
         except KeyboardInterrupt:
             print("\n\nGoodbye!")
