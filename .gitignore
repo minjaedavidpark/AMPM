@@ -141,3 +141,5 @@ data/meetings/*.json
 .ampm/
 .ampm_cache/
 .browser_profile
+
+.playwright-mcp/
