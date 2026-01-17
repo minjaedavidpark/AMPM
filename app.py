@@ -17,6 +17,7 @@ load_dotenv()
 
 # Import AMPM modules
 from ampm import MeetingLoader, QueryEngine, MeetingGraph
+from ampm.core.ripple import RippleDetector
 
 # Page config
 st.set_page_config(
@@ -340,7 +341,7 @@ def initialize_ampm(data_dir: str = "data/samples", use_backboard: bool = False)
 def render_sidebar(loader, engine=None):
     """Render the sidebar with stats and info."""
     st.sidebar.markdown("## AMPM")
-    st.sidebar.caption("Meeting Memory")
+    st.sidebar.caption("SDLC Memory")
 
     st.sidebar.markdown("---")
 
@@ -350,10 +351,10 @@ def render_sidebar(loader, engine=None):
 
         col1, col2 = st.sidebar.columns(2)
         with col1:
-            st.sidebar.metric("Meetings", stats.get('meetings', 0))
+            st.sidebar.metric("Artifacts", stats.get('meetings', 0))
             st.sidebar.metric("Decisions", stats.get('decisions', 0))
         with col2:
-            st.sidebar.metric("Actions", stats.get('action_items', 0))
+            st.sidebar.metric("Work Orders", stats.get('action_items', 0))
             st.sidebar.metric("People", stats.get('people', 0))
 
         st.sidebar.markdown("---")
@@ -361,10 +362,10 @@ def render_sidebar(loader, engine=None):
     # Sample queries
     st.sidebar.markdown("**Try asking**")
     sample_queries = [
-        "Why did we choose Stripe?",
-        "What's blocking the payments launch?",
-        "What decisions were made about mobile?",
-        "What are Bob's action items?",
+        "Why are we using OAuth?",
+        "What's blocking payments?",
+        "Who decided on Stripe?",
+        "What work orders are pending?",
     ]
     for query in sample_queries:
         st.sidebar.markdown(f"_{query}_")
@@ -390,8 +391,8 @@ def render_ask_tab(engine: QueryEngine):
 
     with col_input:
         question = st.text_input(
-            "Ask about your meetings",
-            placeholder="Why did we choose Stripe for payments?",
+            "Ask about your SDLC",
+            placeholder="Why are we using OAuth instead of SAML?",
             key="question_input",
             label_visibility="collapsed"
         )
@@ -539,15 +540,15 @@ def render_decisions_tab(loader):
 
 
 def render_actions_tab(loader):
-    """Render the Action Items tab."""
-    
+    """Render the Work Orders tab."""
+
     # Access action items from the internal dict
     actions = list(loader.graph._action_items.values())
-    
+
     if not actions:
-        st.info("No action items found in the knowledge graph.")
+        st.info("No work orders found.")
         return
-    
+
     # Filter options
     col1, col2, col3 = st.columns(3)
     with col1:
@@ -557,22 +558,22 @@ def render_actions_tab(loader):
         status_filter = st.selectbox("Status:", status_options)
     with col3:
         sort_by = st.selectbox("Sort by:", ["Date", "Assignee"])
-    
+
     # Apply filters
     filtered = actions
     if assignee_filter:
-        filtered = [a for a in filtered 
+        filtered = [a for a in filtered
                     if assignee_filter.lower() in (a.assigned_to or '').lower()]
     if status_filter != "All":
         filtered = [a for a in filtered if a.status.value == status_filter]
-    
+
     # Sort
     if sort_by == "Date":
         filtered = sorted(filtered, key=lambda a: a.created_at, reverse=True)
     else:
         filtered = sorted(filtered, key=lambda a: a.assigned_to or '')
-    
-    st.markdown(f"**{len(filtered)} action items found**")
+
+    st.markdown(f"**{len(filtered)} work orders found**")
     
     # Display actions
     for action in filtered:
@@ -594,22 +595,22 @@ def render_actions_tab(loader):
 
 
 def render_meetings_tab(loader):
-    """Render the Meeting History tab."""
-    
+    """Render the Artifacts tab (PRDs, Blueprints, Meetings)."""
+
     # Access meetings from the internal dict
     all_meetings = list(loader.graph._meetings.values())
-    
+
     if not all_meetings:
-        st.info("No meetings loaded.")
+        st.info("No artifacts loaded.")
         return
-    
+
     # Sort by date
     all_meetings = sorted(all_meetings, key=lambda m: m.date, reverse=True)
-    
-    # Meeting selector
-    meeting_options = {f"{m.title} ({m.date.strftime('%Y-%m-%d') if m.date else 'Unknown'})": m.id 
+
+    # Artifact selector
+    meeting_options = {f"{m.title} ({m.date.strftime('%Y-%m-%d') if m.date else 'Unknown'})": m.id
                        for m in all_meetings}
-    selected_title = st.selectbox("Select a meeting:", list(meeting_options.keys()))
+    selected_title = st.selectbox("Select an artifact:", list(meeting_options.keys()))
     
     if selected_title:
         meeting_id = meeting_options[selected_title]
@@ -940,11 +941,133 @@ def render_add_info_tab(loader):
                 st.markdown(f"- {b.description}")
 
 
+def render_ripple_tab(loader, engine):
+    """Render the Ripple Detection tab - detect downstream impacts of changes."""
+
+    st.markdown("**Detect downstream impacts when requirements change**")
+    st.caption("Change a PRD requirement and see which Blueprints and Work Orders are affected")
+
+    # Get decisions for selection
+    decisions = list(loader.graph._decisions.values())
+
+    if not decisions:
+        st.info("No decisions found. Add some decisions first.")
+        return
+
+    # Sort by date, most recent first
+    decisions = sorted(decisions, key=lambda d: d.timestamp, reverse=True)
+
+    # Create decision options with readable labels
+    decision_options = {}
+    for d in decisions[:20]:  # Limit to recent 20
+        label = d.content[:60] + "..." if len(d.content) > 60 else d.content
+        decision_options[label] = d
+
+    col1, col2 = st.columns([2, 1])
+
+    with col1:
+        selected_label = st.selectbox(
+            "Select a decision to change:",
+            list(decision_options.keys()),
+            key="ripple_decision"
+        )
+
+    selected_decision = decision_options.get(selected_label) if selected_label else None
+
+    if selected_decision:
+        st.markdown(f"**Current:** {selected_decision.content}")
+        if selected_decision.rationale:
+            st.caption(f"Rationale: {selected_decision.rationale}")
+
+        # Input for the change
+        new_value = st.text_area(
+            "New decision (what it would change to):",
+            placeholder="e.g., Use SAML SSO instead of OAuth 2.0",
+            key="ripple_new_value"
+        )
+
+        if st.button("Detect Ripple Effect", type="primary"):
+            if new_value:
+                with st.spinner("Analyzing downstream impacts..."):
+                    start_time = time.time()
+
+                    try:
+                        # Create ripple detector and run analysis
+                        detector = RippleDetector(loader.graph)
+                        report = detector.detect(
+                            selected_decision.id,
+                            new_value,
+                            selected_decision.content
+                        )
+
+                        elapsed = time.time() - start_time
+
+                        # Show results
+                        st.markdown("---")
+                        st.markdown(f"### Ripple Effect Analysis")
+                        st.markdown(f"<p class='time-label'>Analyzed in {elapsed:.1f}s</p>", unsafe_allow_html=True)
+
+                        # Summary metrics
+                        col1, col2, col3 = st.columns(3)
+                        with col1:
+                            st.metric("Affected Items", report.total_affected)
+                        with col2:
+                            critical = sum(1 for i in report.impacts if i.severity == "critical")
+                            st.metric("Critical", critical)
+                        with col3:
+                            st.metric("People to Notify", len(report.people_to_notify))
+
+                        # Show impacts
+                        if report.impacts:
+                            st.markdown("**Affected Artifacts:**")
+                            for impact in report.impacts:
+                                severity_colors = {
+                                    "critical": "#dc2626",
+                                    "high": "#ea580c",
+                                    "medium": "#ca8a04",
+                                    "low": "#65a30d"
+                                }
+                                color = severity_colors.get(impact.severity, "#6b7280")
+
+                                type_label = "Work Order" if impact.type == "action_item" else impact.type.title()
+
+                                st.markdown(f"""
+                                <div class='decision-card'>
+                                    <span style="color:{color};font-weight:600">[{impact.severity.upper()}]</span>
+                                    <strong>{type_label}:</strong> {impact.title}<br/>
+                                    <small>{impact.reason}</small><br/>
+                                    <small style="color:#0066cc">→ {impact.suggestion}</small>
+                                </div>
+                                """, unsafe_allow_html=True)
+                        else:
+                            st.success("No downstream impacts detected. Change appears safe.")
+
+                        # People to notify
+                        if report.people_to_notify:
+                            # Get actual names
+                            people_names = []
+                            for pid in report.people_to_notify:
+                                person = loader.graph.get_person(pid)
+                                people_names.append(person.name if person else pid)
+                            st.markdown(f"**Notify:** {', '.join(people_names)}")
+
+                        # Suggestions
+                        if report.suggestions:
+                            st.markdown("**Recommendations:**")
+                            for suggestion in report.suggestions:
+                                st.markdown(f"- {suggestion}")
+
+                    except Exception as e:
+                        st.error(f"Error during analysis: {str(e)}")
+            else:
+                st.warning("Enter a new decision value to analyze.")
+
+
 def main():
     """Main application entry point."""
     # Header
     st.markdown("<h1 class='main-header'>AMPM</h1>", unsafe_allow_html=True)
-    st.markdown("<p class='sub-header'>Your meeting memory</p>", unsafe_allow_html=True)
+    st.markdown("<p class='sub-header'>SDLC Memory Layer</p>", unsafe_allow_html=True)
 
     # Initialize
     loader, engine, error = initialize_ampm()
@@ -959,20 +1082,20 @@ def main():
     # Render sidebar
     render_sidebar(loader, engine)
 
-    # Main content tabs
+    # Main content tabs - SDLC focused
     tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
-        "Ask",
-        "Add",
+        "Query",
+        "Ripple",
         "Decisions",
-        "Actions",
-        "Meetings",
+        "Work Orders",
+        "Artifacts",
         "Blockers"
     ])
 
     with tab1:
         render_ask_tab(engine)
     with tab2:
-        render_add_info_tab(loader)
+        render_ripple_tab(loader, engine)
     with tab3:
         render_decisions_tab(loader)
     with tab4:
