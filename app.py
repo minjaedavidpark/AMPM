@@ -20,65 +20,142 @@ from ampm import MeetingLoader, QueryEngine, MeetingGraph
 
 # Page config
 st.set_page_config(
-    page_title="AMPM - AI Meeting Product Manager",
-    page_icon="🕐",
+    page_title="AMPM",
+    page_icon="⏰",
     layout="wide",
     initial_sidebar_state="expanded"
 )
 
-# Custom CSS for better styling
+# Clean, minimal CSS - Light theme
 st.markdown("""
 <style>
+    /* Light theme base */
+    .stApp {
+        background-color: #ffffff;
+    }
+
     .main-header {
-        font-size: 2.5rem;
-        font-weight: 700;
+        font-size: 1.75rem;
+        font-weight: 600;
         margin-bottom: 0;
+        letter-spacing: -0.02em;
+        color: #1d1d1f;
     }
     .sub-header {
-        font-size: 1.1rem;
-        color: #666;
+        font-size: 0.95rem;
+        color: #86868b;
         margin-top: 0;
+        font-weight: 400;
     }
-    .metric-card {
-        background: #f8f9fa;
-        padding: 1rem;
-        border-radius: 8px;
-        border-left: 4px solid #667eea;
+    .answer-text {
+        font-size: 1rem;
+        line-height: 1.6;
+        color: #1d1d1f;
     }
+
+    /* Even tab spacing */
+    .stTabs [data-baseweb="tab-list"] {
+        gap: 0;
+        justify-content: space-between;
+        border-bottom: 1px solid #e5e5e7;
+    }
+    .stTabs [data-baseweb="tab"] {
+        flex: 1;
+        padding: 12px 24px;
+        font-size: 0.9rem;
+        font-weight: 500;
+        color: #86868b;
+        border-radius: 0;
+        border-bottom: 2px solid transparent;
+        justify-content: center;
+    }
+    .stTabs [aria-selected="true"] {
+        color: #1d1d1f;
+        border-bottom: 2px solid #1d1d1f;
+        background: transparent;
+    }
+
+    /* Cards */
     .source-card {
-        background: #f0f4f8;
-        padding: 0.8rem;
-        border-radius: 6px;
-        margin: 0.5rem 0;
-        border-left: 3px solid #4a5568;
+        background: #f5f5f7;
+        padding: 14px 18px;
+        border-radius: 10px;
+        margin: 10px 0;
+        font-size: 0.9rem;
+        border: 1px solid #e5e5e7;
     }
-    .decision-card {
-        background: #e8f5e9;
-        padding: 1rem;
-        border-radius: 8px;
-        margin: 0.5rem 0;
-        border-left: 4px solid #4caf50;
+    .source-card strong {
+        color: #1d1d1f;
+        display: block;
+        margin-bottom: 4px;
     }
-    .action-card {
-        background: #e3f2fd;
-        padding: 1rem;
-        border-radius: 8px;
-        margin: 0.5rem 0;
-        border-left: 4px solid #2196f3;
+    .source-card .summary {
+        color: #424245;
+        font-size: 0.85rem;
+        margin: 6px 0;
+    }
+    .source-card a {
+        color: #0066cc;
+        font-size: 0.8rem;
+        text-decoration: none;
+    }
+    .source-card a:hover {
+        text-decoration: underline;
+    }
+    .decision-card, .action-card {
+        background: #f5f5f7;
+        padding: 14px 18px;
+        border-radius: 10px;
+        margin: 8px 0;
+        border: 1px solid #e5e5e7;
     }
     .blocker-card {
-        background: #ffebee;
-        padding: 1rem;
-        border-radius: 8px;
-        margin: 0.5rem 0;
-        border-left: 4px solid #f44336;
+        background: #fef2f2;
+        padding: 14px 18px;
+        border-radius: 10px;
+        margin: 8px 0;
+        border: 1px solid #fecaca;
     }
-    .timing-badge {
-        background: #667eea;
-        color: white;
-        padding: 0.2rem 0.5rem;
-        border-radius: 4px;
+    .time-label {
+        color: #86868b;
         font-size: 0.8rem;
+        margin-top: 8px;
+    }
+
+    /* Metrics */
+    div[data-testid="stMetric"] {
+        background: #f5f5f7;
+        padding: 14px;
+        border-radius: 10px;
+        border: 1px solid #e5e5e7;
+    }
+
+    /* Buttons */
+    .stButton > button {
+        border-radius: 8px;
+        font-weight: 500;
+        padding: 8px 20px;
+    }
+    .stButton > button[kind="primary"] {
+        background: #1d1d1f;
+        color: white;
+    }
+
+    /* Input fields */
+    .stTextInput > div > div > input {
+        border-radius: 8px;
+        border: 1px solid #e5e5e7;
+        padding: 10px 14px;
+    }
+    .stTextArea > div > div > textarea {
+        border-radius: 8px;
+        border: 1px solid #e5e5e7;
+    }
+
+    /* Sidebar */
+    section[data-testid="stSidebar"] {
+        background: #fafafa;
+        border-right: 1px solid #e5e5e7;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -209,7 +286,7 @@ def load_or_build_knowledge_graph(data_dir: str = "data/samples", cache_dir: str
 
 
 @st.cache_resource(show_spinner="Loading meetings and building knowledge graph...")
-def initialize_ampm(data_dir: str = "data/samples", use_backboard: bool = True):
+def initialize_ampm(data_dir: str = "data/samples", use_backboard: bool = False):
     """
     Initialize AMPM by loading meetings and building knowledge graph.
 
@@ -262,235 +339,140 @@ def initialize_ampm(data_dir: str = "data/samples", use_backboard: bool = True):
 
 def render_sidebar(loader, engine=None):
     """Render the sidebar with stats and info."""
-    st.sidebar.markdown("## 🕐 AMPM")
-    st.sidebar.markdown("*AI Meeting Product Manager*")
-
-    # Show backend status
-    has_backboard = bool(os.getenv("BACKBOARD_API_KEY"))
-    has_cerebras = bool(os.getenv("CEREBRAS_API_KEY"))
-
-    if engine:
-        use_backboard = getattr(engine, '_use_backboard', False)
-        has_thread = getattr(engine, '_has_backboard_thread', False)
-
-        if use_backboard and has_thread:
-            st.sidebar.success("🔗 Backboard Connected (Persistent Memory)")
-        elif has_backboard:
-            st.sidebar.warning("⚠️ Backboard Available (Not Connected)")
-        else:
-            st.sidebar.info("💾 Local Mode (No Persistence)")
-
-        if has_cerebras:
-            st.sidebar.caption("⚡ Using Cerebras for fast LLM")
+    st.sidebar.markdown("## AMPM")
+    st.sidebar.caption("Meeting Memory")
 
     st.sidebar.markdown("---")
 
-    # Cache control buttons
-    col1, col2 = st.sidebar.columns(2)
-    with col1:
-        if st.button("🔄 Reload"):
-            st.cache_resource.clear()
-            st.rerun()
-    with col2:
-        if st.button("🗑️ Clear Cache"):
-            # Clear persistent cache
-            import shutil
-            from pathlib import Path
-            cache_dir = Path(".ampm_cache")
-            if cache_dir.exists():
-                shutil.rmtree(cache_dir)
-                st.sidebar.success("Cache cleared!")
-            st.cache_resource.clear()
-            st.rerun()
-
-    st.sidebar.markdown("---")
-    
     # Stats
     if loader and loader.graph:
         stats = loader.graph.stats
-        
-        st.sidebar.markdown("### 📊 Knowledge Graph Stats")
+
         col1, col2 = st.sidebar.columns(2)
-        
         with col1:
-            st.metric("Meetings", stats.get('meetings', 0))
-            st.metric("Decisions", stats.get('decisions', 0))
-            st.metric("Topics", stats.get('topics', 0))
-        
+            st.sidebar.metric("Meetings", stats.get('meetings', 0))
+            st.sidebar.metric("Decisions", stats.get('decisions', 0))
         with col2:
-            st.metric("Actions", stats.get('action_items', 0))
-            st.metric("People", stats.get('people', 0))
-        
+            st.sidebar.metric("Actions", stats.get('action_items', 0))
+            st.sidebar.metric("People", stats.get('people', 0))
+
         st.sidebar.markdown("---")
-    
+
     # Sample queries
-    st.sidebar.markdown("### 💡 Try asking:")
+    st.sidebar.markdown("**Try asking**")
     sample_queries = [
         "Why did we choose Stripe?",
         "What's blocking the payments launch?",
         "What decisions were made about mobile?",
         "What are Bob's action items?",
-        "Tell me about the April outage"
     ]
-    
     for query in sample_queries:
-        st.sidebar.markdown(f"- *{query}*")
+        st.sidebar.markdown(f"_{query}_")
+
+    st.sidebar.markdown("---")
+
+    # Minimal controls
+    if st.sidebar.button("Reload Data", use_container_width=True):
+        import shutil
+        from pathlib import Path
+        cache_dir = Path(".ampm_cache")
+        if cache_dir.exists():
+            shutil.rmtree(cache_dir)
+        st.cache_resource.clear()
+        st.rerun()
 
 
 def render_ask_tab(engine: QueryEngine):
-    """Render the Ask Questions tab with voice support."""
-    st.markdown("### 🔍 Ask a Question")
-    st.markdown("Ask about decisions, action items, blockers, or any meeting context.")
+    """Render the Ask Questions tab."""
 
-    # Check API keys
-    has_elevenlabs = bool(os.getenv("ELEVENLABS_API_KEY"))
-    use_backboard = getattr(engine, '_use_backboard', False)
-    has_thread = getattr(engine, '_has_backboard_thread', False)
+    # Input row with text field and buttons
+    col_input, col_ask, col_audio = st.columns([8, 1, 1])
 
-    # Query mode selection
-    col1, col2 = st.columns([2, 1])
-    with col1:
-        input_mode = st.radio(
-            "Input method:",
-            ["⌨️ Type", "🎤 Voice"],
-            horizontal=True,
-            key="input_mode"
-        )
-    with col2:
-        # Fast mode uses Backboard's integrated RAG (disabled by default - uses OpenRouter credits)
-        fast_mode = st.checkbox(
-            "⚡ Fast Mode",
-            value=False,  # Default to False - Backboard uses OpenRouter which may have credit limits
-            disabled=not (use_backboard and has_thread),
-            help="Use Backboard's memory-augmented RAG (requires OpenRouter credits)" if use_backboard else "Enable Backboard to use Fast Mode"
-        )
-    
-    question = None
-    
-    if input_mode == "🎤 Voice":
-        # Voice input mode
-        audio_input = st.audio_input("Click to record your question", key="voice_input")
-        
-        if audio_input:
-            st.audio(audio_input, format="audio/wav")
-            
-            if st.button("🎯 Transcribe & Ask", type="primary"):
-                with st.spinner("Transcribing audio..."):
-                    try:
-                        from openai import OpenAI
-                        client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-                        
-                        import tempfile
-                        with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as f:
-                            f.write(audio_input.getvalue())
-                            temp_path = f.name
-                        
-                        with open(temp_path, "rb") as audio_file:
-                            transcript = client.audio.transcriptions.create(
-                                model="whisper-1",
-                                file=audio_file,
-                                language="en"
-                            )
-                        
-                        os.unlink(temp_path)
-                        question = transcript.text
-                        st.markdown(f"**Transcribed:** *{question}*")
-                        
-                    except Exception as e:
-                        st.error(f"Transcription failed: {e}")
-                        return
-    else:
-        # Text input mode
+    with col_input:
         question = st.text_input(
-            "Your question:",
-            placeholder="e.g., Why did we choose Stripe for payments?",
-            key="question_input"
+            "Ask about your meetings",
+            placeholder="Why did we choose Stripe for payments?",
+            key="question_input",
+            label_visibility="collapsed"
         )
-        
-        if st.button("Ask AMPM", type="primary"):
-            if not question:
-                st.warning("Please enter a question.")
-                return
-        else:
-            question = None  # Don't process unless button clicked
-    
-    # Voice response option
-    col1, col2 = st.columns([3, 1])
-    with col2:
-        speak_response = st.checkbox(
-            "🔊 Voice response",
-            value=False,
-            disabled=not has_elevenlabs,
-            help="Enable ElevenLabs to hear the answer" if has_elevenlabs else "Add ELEVENLABS_API_KEY to .env"
-        )
-    
+
+    with col_ask:
+        ask_clicked = st.button("Ask", type="primary", use_container_width=True)
+
+    with col_audio:
+        has_elevenlabs = bool(os.getenv("ELEVENLABS_API_KEY"))
+        speak_response = st.button("🔊", disabled=not has_elevenlabs,
+                                   help="Voice response" if has_elevenlabs else "Requires ElevenLabs API key",
+                                   use_container_width=True)
+
     # Process the question
-    if question:
-        mode_label = "Backboard RAG" if fast_mode else "Graph + LLM"
-        with st.spinner(f"Searching meeting knowledge ({mode_label})..."):
+    if (ask_clicked or speak_response) and question:
+        with st.spinner("Searching..."):
             start_time = time.time()
-            if fast_mode:
-                result = engine.query_fast(question)
-            else:
-                result = engine.query(question)
+            result = engine.query(question)
             elapsed = time.time() - start_time
 
-        # Show timing with mode indicator
-        mode_badge = "⚡" if fast_mode else "🔍"
-        st.markdown(f"<span class='timing-badge'>{mode_badge} Answered in {elapsed:.2f}s</span>", unsafe_allow_html=True)
-        
         # Show answer
-        st.markdown("### Answer")
-        st.markdown(result.answer)
-        
+        st.markdown(f"<div class='answer-text'>{result.answer}</div>", unsafe_allow_html=True)
+        st.markdown(f"<p class='time-label'>{elapsed:.1f}s</p>", unsafe_allow_html=True)
+
         # Generate voice response if enabled
         if speak_response and has_elevenlabs:
-            with st.spinner("Generating voice response..."):
-                try:
-                    from elevenlabs import ElevenLabs
-                    
-                    elevenlabs = ElevenLabs(api_key=os.getenv("ELEVENLABS_API_KEY"))
-                    voice_id = os.getenv("ELEVENLABS_VOICE_ID", "21m00Tcm4TlvDq8ikWAM")
-                    
-                    audio_generator = elevenlabs.text_to_speech.convert(
-                        text=result.answer,
-                        voice_id=voice_id,
-                        model_id="eleven_turbo_v2_5",
-                        output_format="mp3_44100_128"
-                    )
-                    
-                    audio_bytes = b"".join(audio_generator)
-                    st.audio(audio_bytes, format="audio/mp3", autoplay=True)
-                    
-                except Exception as e:
-                    st.error(f"Voice generation failed: {e}")
-        
-        # Show confidence
-        confidence = result.confidence
-        confidence_color = "green" if confidence > 0.7 else "orange" if confidence > 0.4 else "red"
-        st.markdown(f"**Confidence:** :{confidence_color}[{confidence:.0%}]")
-        
-        # Show sources
-        if result.sources:
-            st.markdown("### 📚 Sources")
-            for source in result.sources[:5]:
-                meeting_title = source.get('meeting_title', source.get('meeting_id', 'Unknown'))
-                date = source.get('date', 'Unknown date')
-                content_type = source.get('type', 'content')
-                content = source.get('content', source.get('text', ''))[:150]
-                st.markdown(f"""
-                <div class='source-card'>
-                    <strong>{meeting_title}</strong> ({date})<br/>
-                    <em>{content_type}</em>: {content}...
-                </div>
-                """, unsafe_allow_html=True)
+            try:
+                from elevenlabs import ElevenLabs
+                elevenlabs_client = ElevenLabs(api_key=os.getenv("ELEVENLABS_API_KEY"))
+                voice_id = os.getenv("ELEVENLABS_VOICE_ID", "21m00Tcm4TlvDq8ikWAM")
+                audio_generator = elevenlabs_client.text_to_speech.convert(
+                    text=result.answer, voice_id=voice_id,
+                    model_id="eleven_turbo_v2_5", output_format="mp3_44100_128"
+                )
+                st.audio(b"".join(audio_generator), format="audio/mp3", autoplay=True)
+            except Exception:
+                pass
+
+        # Only show sources if the answer is substantive (not "I don't know" type responses)
+        answer_lower = result.answer.lower()
+        no_info_phrases = ["don't have enough information", "not mentioned", "no mention",
+                          "not addressed", "cannot find", "no information", "not found"]
+        has_relevant_answer = not any(phrase in answer_lower for phrase in no_info_phrases)
+
+        if result.sources and has_relevant_answer and result.confidence > 0.3:
+            with st.expander("Sources", expanded=False):
+                for source in result.sources[:3]:
+                    meeting_title = source.get('meeting_title', source.get('meeting_id', ''))
+                    meeting_id = source.get('meeting_id', '')
+                    date = source.get('meeting_date', source.get('date', ''))
+                    content = source.get('content', source.get('decision_content', ''))
+                    rationale = source.get('rationale', '')
+
+                    # Build summary from content
+                    summary = ''
+                    if content:
+                        summary = content[:120] + '...' if len(content) > 120 else content
+                    elif rationale:
+                        summary = rationale[:120] + '...' if len(rationale) > 120 else rationale
+
+                    if meeting_title:
+                        date_str = f" · {date}" if date and date != 'Unknown date' else ""
+                        # Create link to data file
+                        file_link = f"data/samples/{meeting_id}.json" if meeting_id else ""
+                        link_html = f'<a href="file://{os.getcwd()}/{file_link}" target="_blank">View source</a>' if file_link else ''
+
+                        st.markdown(f"""
+                        <div class='source-card'>
+                            <strong>{meeting_title}</strong><small style="color:#86868b">{date_str}</small>
+                            <div class='summary'>{summary}</div>
+                            {link_html}
+                        </div>
+                        """, unsafe_allow_html=True)
+
+    elif (ask_clicked or speak_response) and not question:
+        st.info("Enter a question above.")
 
 
 
 def render_decisions_tab(loader):
     """Render the Decision Ledger tab."""
-    st.markdown("### 📋 Decision Ledger")
-    st.markdown("All decisions extracted from meetings, sorted by date.")
     
     # Access decisions from the internal dict
     decisions = list(loader.graph._decisions.values())
@@ -533,21 +515,15 @@ def render_decisions_tab(loader):
         
         st.markdown(f"""
         <div class='decision-card'>
-            <strong>📌 {decision.content}</strong><br/>
-            <em>Reasoning:</em> {decision.rationale or 'Not specified'}<br/>
-            <small>
-                👤 {made_by} | 
-                📅 {date_str} | 
-                📋 {meeting_title}
-            </small>
+            <strong>{decision.content}</strong><br/>
+            <small>{decision.rationale or ''}</small><br/>
+            <small style="color:#86868b">{made_by} · {date_str} · {meeting_title}</small>
         </div>
         """, unsafe_allow_html=True)
 
 
 def render_actions_tab(loader):
     """Render the Action Items tab."""
-    st.markdown("### ✅ Action Items")
-    st.markdown("Track action items across all meetings.")
     
     # Access action items from the internal dict
     actions = list(loader.graph._action_items.values())
@@ -585,30 +561,24 @@ def render_actions_tab(loader):
     # Display actions
     for action in filtered:
         status = action.status.value if action.status else 'pending'
-        status_emoji = "✅" if status == "completed" else "⏳" if status == "in_progress" else "🔴" if status == "blocked" else "📋"
-        
+
         # Get assignee name
         person = loader.graph.get_person(action.assigned_to) if action.assigned_to else None
         assignee = person.name if person else action.assigned_to or 'Unassigned'
-        
-        due_date = action.due_date.strftime('%Y-%m-%d') if action.due_date else 'No due date'
-        
+
+        due_date = action.due_date.strftime('%Y-%m-%d') if action.due_date else ''
+        due_str = f" · Due {due_date}" if due_date else ""
+
         st.markdown(f"""
         <div class='action-card'>
-            <strong>{status_emoji} {action.task}</strong><br/>
-            <small>
-                👤 {assignee} | 
-                📅 Due: {due_date} |
-                Status: {status}
-            </small>
+            <strong>{action.task}</strong><br/>
+            <small style="color:#86868b">{assignee}{due_str} · {status}</small>
         </div>
         """, unsafe_allow_html=True)
 
 
 def render_meetings_tab(loader):
     """Render the Meeting History tab."""
-    st.markdown("### 📅 Meeting History")
-    st.markdown("Browse all meetings and their extracted content.")
     
     # Access meetings from the internal dict
     all_meetings = list(loader.graph._meetings.values())
@@ -654,60 +624,52 @@ def render_meetings_tab(loader):
             
             # Decisions
             if decisions:
-                st.markdown(f"### 📌 Decisions ({len(decisions)})")
+                st.markdown(f"**Decisions** ({len(decisions)})")
                 for d in decisions:
                     person = loader.graph.get_person(d.made_by) if d.made_by else None
-                    made_by = person.name if person else d.made_by or 'Unknown'
+                    made_by = person.name if person else d.made_by or ''
                     st.markdown(f"""
                     <div class='decision-card'>
                         <strong>{d.content}</strong><br/>
-                        <em>Reasoning:</em> {d.rationale or 'Not specified'}<br/>
-                        <small>👤 Decided by: {made_by}</small>
+                        <small>{d.rationale or ''}</small>
+                        <small style="color:#86868b">{made_by}</small>
                     </div>
                     """, unsafe_allow_html=True)
-            
-            # Action Items - get from meeting's action_items list
-            action_items = []
-            for action_id in meeting.action_items:
-                action = loader.graph._action_items.get(action_id)
-                if action:
-                    action_items.append(action)
-            
+
+            # Action Items
+            action_items = [loader.graph._action_items.get(aid) for aid in meeting.action_items]
+            action_items = [a for a in action_items if a]
+
             if action_items:
-                st.markdown(f"### ✅ Action Items ({len(action_items)})")
+                st.markdown(f"**Actions** ({len(action_items)})")
                 for a in action_items:
                     person = loader.graph.get_person(a.assigned_to) if a.assigned_to else None
-                    assignee = person.name if person else a.assigned_to or 'Unassigned'
+                    assignee = person.name if person else a.assigned_to or ''
                     st.markdown(f"""
                     <div class='action-card'>
                         <strong>{a.task}</strong><br/>
-                        <small>👤 Assigned to: {assignee}</small>
+                        <small style="color:#86868b">{assignee}</small>
                     </div>
                     """, unsafe_allow_html=True)
-            
-            # Blockers - get from meeting's blockers list
-            blockers = []
-            for blocker_id in meeting.blockers:
-                blocker = loader.graph._blockers.get(blocker_id)
-                if blocker:
-                    blockers.append(blocker)
-            
+
+            # Blockers
+            blockers = [loader.graph._blockers.get(bid) for bid in meeting.blockers]
+            blockers = [b for b in blockers if b]
+
             if blockers:
-                st.markdown(f"### 🚧 Blockers ({len(blockers)})")
+                st.markdown(f"**Blockers** ({len(blockers)})")
                 for b in blockers:
-                    status = "✅ Resolved" if b.resolved else "⏳ Open"
+                    status = "Resolved" if b.resolved else "Open"
                     st.markdown(f"""
                     <div class='blocker-card'>
                         <strong>{b.description}</strong><br/>
-                        <small>Status: {status}</small>
+                        <small style="color:#86868b">{status}</small>
                     </div>
                     """, unsafe_allow_html=True)
 
 
 def render_blockers_tab(loader):
     """Render the Blockers tab."""
-    st.markdown("### 🚧 Blockers")
-    st.markdown("Track impediments and blockers across all meetings.")
     
     # Access blockers from the internal dict
     blockers = list(loader.graph._blockers.values())
@@ -732,54 +694,43 @@ def render_blockers_tab(loader):
     
     # Display blockers
     for blocker in filtered:
-        status = "✅ Resolved" if blocker.resolved else "⏳ Open"
-        status_emoji = "✅" if blocker.resolved else "🔴"
-        
+        status = "Resolved" if blocker.resolved else "Open"
+
         # Get reporter name
         person = loader.graph.get_person(blocker.reported_by) if blocker.reported_by else None
         reported_by = person.name if person else blocker.reported_by or 'Unknown'
-        
-        date_str = blocker.created_at.strftime('%Y-%m-%d') if blocker.created_at else 'Unknown'
-        
+
+        date_str = blocker.created_at.strftime('%Y-%m-%d') if blocker.created_at else ''
+
         st.markdown(f"""
         <div class='blocker-card'>
-            <strong>{status_emoji} {blocker.description}</strong><br/>
-            <em>Impact:</em> {blocker.impact or 'Not specified'}<br/>
-            <small>
-                👤 Reported by: {reported_by} | 
-                📅 {date_str} |
-                {status}
-            </small>
+            <strong>{blocker.description}</strong><br/>
+            <small>{blocker.impact or ''}</small><br/>
+            <small style="color:#86868b">{reported_by} · {date_str} · {status}</small>
         </div>
         """, unsafe_allow_html=True)
 
 
 def render_add_info_tab(loader):
     """Render the Add Info tab for real-time knowledge graph updates."""
-    st.markdown("### ➕ Add Information in Real-Time")
-    st.markdown("Add decisions, actions, blockers, or notes during your meeting. Changes are saved automatically.")
-    
+
     # Create or get live meeting
     live_meeting = loader.get_or_create_live_meeting()
-    
-    st.info(f"📍 **Live Session:** {live_meeting.title}")
-    
+
     # Sub-tabs for different entry types
     add_type = st.radio(
-        "What would you like to add?",
-        ["📋 Decision", "✅ Action Item", "🚧 Blocker", "👤 Person", "📝 Note"],
-        horizontal=True
+        "Add to meeting",
+        ["Decision", "Action", "Blocker", "Person", "Note"],
+        horizontal=True,
+        label_visibility="collapsed"
     )
-    
-    st.markdown("---")
     
     # Get existing people for dropdowns
     people = list(loader.graph._people.values())
     people_options = ["(none)"] + [p.name for p in people]
     
-    if add_type == "📋 Decision":
-        st.markdown("#### Record a Decision")
-        
+    if add_type == "Decision":
+                
         decision_content = st.text_area(
             "Decision:",
             placeholder="e.g., We will use Stripe for payment processing",
@@ -802,7 +753,7 @@ def render_add_info_tab(loader):
             key="decision_rationale"
         )
         
-        if st.button("➕ Add Decision", type="primary", key="add_decision_btn"):
+        if st.button("Add", type="primary", key="add_decision_btn"):
             if decision_content:
                 person_id = None
                 if made_by != "(none)":
@@ -814,14 +765,13 @@ def render_add_info_tab(loader):
                     topic=decision_topic if decision_topic else None,
                     made_by=person_id
                 )
-                st.success(f"✓ Decision added! ID: {decision.id}")
+                st.success("Added")
                 st.rerun()
             else:
                 st.warning("Please enter a decision.")
     
-    elif add_type == "✅ Action Item":
-        st.markdown("#### Record an Action Item")
-        
+    elif add_type == "Action":
+                
         action_task = st.text_area(
             "Task:",
             placeholder="e.g., Create API documentation for the payment integration",
@@ -839,7 +789,7 @@ def render_add_info_tab(loader):
         decision_options = ["(none)"] + [f"{d.content[:50]}..." for d in decisions[-10:]]  # Last 10
         related_decision = st.selectbox("Related to decision:", decision_options, key="action_decision")
         
-        if st.button("➕ Add Action Item", type="primary", key="add_action_btn"):
+        if st.button("Add", type="primary", key="add_action_btn"):
             if action_task:
                 person_id = None
                 if assigned_to != "(none)":
@@ -860,14 +810,13 @@ def render_add_info_tab(loader):
                     due_date=due_dt,
                     decision_id=decision_id
                 )
-                st.success(f"✓ Action item added! ID: {action.id}")
+                st.success("Added")
                 st.rerun()
             else:
                 st.warning("Please enter a task description.")
     
-    elif add_type == "🚧 Blocker":
-        st.markdown("#### Report a Blocker")
-        
+    elif add_type == "Blocker":
+                
         blocker_desc = st.text_area(
             "Blocker description:",
             placeholder="e.g., Waiting for security team approval on the API design",
@@ -884,7 +833,7 @@ def render_add_info_tab(loader):
             key="blocker_impact"
         )
         
-        if st.button("➕ Add Blocker", type="primary", key="add_blocker_btn"):
+        if st.button("Add", type="primary", key="add_blocker_btn"):
             if blocker_desc:
                 person_id = None
                 if reported_by != "(none)":
@@ -895,14 +844,13 @@ def render_add_info_tab(loader):
                     reported_by=person_id,
                     impact=blocker_impact if blocker_impact else None
                 )
-                st.success(f"✓ Blocker added! ID: {blocker.id}")
+                st.success("Added")
                 st.rerun()
             else:
                 st.warning("Please describe the blocker.")
     
-    elif add_type == "👤 Person":
-        st.markdown("#### Add a Team Member")
-        
+    elif add_type == "Person":
+                
         person_name = st.text_input(
             "Name:",
             placeholder="e.g., Sarah Chen",
@@ -923,21 +871,20 @@ def render_add_info_tab(loader):
                 key="person_email"
             )
         
-        if st.button("➕ Add Person", type="primary", key="add_person_btn"):
+        if st.button("Add", type="primary", key="add_person_btn"):
             if person_name:
                 person = loader.add_person_realtime(
                     name=person_name,
                     role=person_role if person_role else None,
                     email=person_email if person_email else None
                 )
-                st.success(f"✓ Person added: {person.name}")
+                st.success("Added")
                 st.rerun()
             else:
                 st.warning("Please enter a name.")
     
-    elif add_type == "📝 Note":
-        st.markdown("#### Add a Note")
-        
+    elif add_type == "Note":
+                
         note_content = st.text_area(
             "Note:",
             placeholder="Any observation, insight, or discussion point...",
@@ -950,126 +897,74 @@ def render_add_info_tab(loader):
             key="note_category"
         )
         
-        if st.button("➕ Add Note", type="primary", key="add_note_btn"):
+        if st.button("Add", type="primary", key="add_note_btn"):
             if note_content:
                 note_id = loader.add_note_realtime(
                     content=note_content,
                     category=note_category
                 )
-                st.success(f"✓ Note added! ID: {note_id}")
+                st.success("Added")
                 st.rerun()
             else:
                 st.warning("Please enter a note.")
     
-    # Show recent additions
-    st.markdown("---")
-    st.markdown("#### 📊 Live Session Summary")
-    
-    col1, col2, col3 = st.columns(3)
-    
-    # Count items from live meeting
+    # Show recent additions (only if there are any)
     live_decisions = [d for d in loader.graph._decisions.values() if d.meeting_id == "live_meeting"]
     live_actions = [a for a in loader.graph._action_items.values() if a.meeting_id == "live_meeting"]
     live_blockers = [b for b in loader.graph._blockers.values() if b.meeting_id == "live_meeting"]
-    
-    with col1:
-        st.metric("Decisions", len(live_decisions))
-    with col2:
-        st.metric("Action Items", len(live_actions))
-    with col3:
-        st.metric("Blockers", len(live_blockers))
-    
-    # Show recent items
+
     if live_decisions or live_actions or live_blockers:
-        with st.expander("View items added this session"):
-            if live_decisions:
-                st.markdown("**Decisions:**")
-                for d in live_decisions[-5:]:
-                    st.markdown(f"- {d.content}")
-            if live_actions:
-                st.markdown("**Actions:**")
-                for a in live_actions[-5:]:
-                    st.markdown(f"- {a.task}")
-            if live_blockers:
-                st.markdown("**Blockers:**")
-                for b in live_blockers[-5:]:
-                    st.markdown(f"- {b.description}")
+        st.markdown("---")
+        with st.expander(f"This session: {len(live_decisions)} decisions, {len(live_actions)} actions, {len(live_blockers)} blockers"):
+            for d in live_decisions[-5:]:
+                st.markdown(f"- {d.content}")
+            for a in live_actions[-5:]:
+                st.markdown(f"- {a.task}")
+            for b in live_blockers[-5:]:
+                st.markdown(f"- {b.description}")
 
 
 def main():
     """Main application entry point."""
     # Header
-    st.markdown("<h1 class='main-header'>🕐 AMPM</h1>", unsafe_allow_html=True)
-    st.markdown("<p class='sub-header'>AI Meeting Product Manager - From AM to PM, Never Miss a Decision</p>", unsafe_allow_html=True)
-    
-    # Initialize AMPM
+    st.markdown("<h1 class='main-header'>AMPM</h1>", unsafe_allow_html=True)
+    st.markdown("<p class='sub-header'>Your meeting memory</p>", unsafe_allow_html=True)
+
+    # Initialize
     loader, engine, error = initialize_ampm()
-    
+
     if error:
-        st.error(f"Failed to initialize AMPM: {error}")
-        
-        # Show reload button
-        if st.button("🔄 Clear Cache and Retry"):
+        st.error(f"Failed to load: {error}")
+        if st.button("Retry"):
             st.cache_resource.clear()
             st.rerun()
-        
-        st.markdown("""
-        ### Setup Instructions
-        
-        1. Make sure you have API keys set in `.env`:
-           ```
-           OPENAI_API_KEY=sk-...
-           CEREBRAS_API_KEY=...
-           ```
-        
-        2. Make sure you have meeting files in the `data/samples/` directory
-        
-        3. Install dependencies:
-           ```bash
-           pip install -r requirements.txt
-           ```
-        
-        4. Click "Clear Cache and Retry" above after fixing any issues
-        """)
         return
-    
+
     # Render sidebar
     render_sidebar(loader, engine)
-    
+
     # Main content tabs
     tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
-        "🔍 Ask Questions",
-        "➕ Add Info",
-        "📋 Decision Ledger", 
-        "✅ Action Items",
-        "📅 Meeting History",
-        "🚧 Blockers"
+        "Ask",
+        "Add",
+        "Decisions",
+        "Actions",
+        "Meetings",
+        "Blockers"
     ])
-    
+
     with tab1:
         render_ask_tab(engine)
-    
     with tab2:
         render_add_info_tab(loader)
-    
     with tab3:
         render_decisions_tab(loader)
-    
     with tab4:
         render_actions_tab(loader)
-    
     with tab5:
         render_meetings_tab(loader)
-    
     with tab6:
         render_blockers_tab(loader)
-    
-    # Footer
-    st.markdown("---")
-    st.markdown(
-        "<center><small>AMPM - AI Meeting Product Manager | Built with Streamlit, NetworkX, and OpenAI</small></center>",
-        unsafe_allow_html=True
-    )
 
 
 if __name__ == "__main__":
