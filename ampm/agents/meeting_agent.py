@@ -104,8 +104,8 @@ class MeetingAgent:
             data.get("blockers")
         ])
         
-        # Auto-extract from transcript if needed
-        if transcript and not has_structured_data:
+        # Auto-extract from transcript if needed (can be slow - uses LLM)
+        if transcript and not has_structured_data and not getattr(self, 'skip_extraction', False):
             print(f"  Extracting entities from transcript for {data.get('title', 'meeting')}...")
             try:
                 extracted = self.extract_from_transcript(transcript, data.get("title", "Meeting"))

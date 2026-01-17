@@ -175,7 +175,8 @@ def load_or_build_knowledge_graph(data_dir: str = "data/samples", cache_dir: str
         config_dir=str(cache_path / "backboard"),
         persist=True
     )
-    loader = MeetingLoader(graph, embeddings)
+    # Use fast_load=True to skip slow LLM entity extraction
+    loader = MeetingLoader(graph, embeddings, fast_load=True)
 
     meetings = loader.load_directory(data_dir)
     if not meetings:

@@ -32,17 +32,23 @@ class MeetingLoader:
     """
 
     def __init__(self, graph: Optional[MeetingGraph] = None,
-                 embeddings: Optional[EmbeddingStore] = None):
+                 embeddings: Optional[EmbeddingStore] = None,
+                 fast_load: bool = False):
         """
         Initialize the meeting loader.
 
         Args:
             graph: Optional existing graph (creates new if None)
             embeddings: Optional embedding store for indexing
+            fast_load: Skip LLM-based entity extraction (faster but less data)
         """
         self.graph = graph or MeetingGraph()
         self.embeddings = embeddings or EmbeddingStore(use_backboard=True)
         self.agent = MeetingAgent(self.graph, self.embeddings)
+
+        # Fast load skips LLM extraction
+        if fast_load:
+            self.agent.skip_extraction = True
 
     def load_file(self, path: Union[str, Path]) -> list[Meeting]:
         """
