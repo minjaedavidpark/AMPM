@@ -357,12 +357,12 @@ def render_ask_tab(engine: QueryEngine):
             key="input_mode"
         )
     with col2:
-        # Fast mode uses Backboard's integrated RAG
+        # Fast mode uses Backboard's integrated RAG (disabled by default - uses OpenRouter credits)
         fast_mode = st.checkbox(
             "⚡ Fast Mode",
-            value=use_backboard and has_thread,
+            value=False,  # Default to False - Backboard uses OpenRouter which may have credit limits
             disabled=not (use_backboard and has_thread),
-            help="Use Backboard's memory-augmented RAG for faster responses" if use_backboard else "Enable Backboard to use Fast Mode"
+            help="Use Backboard's memory-augmented RAG (requires OpenRouter credits)" if use_backboard else "Enable Backboard to use Fast Mode"
         )
     
     question = None

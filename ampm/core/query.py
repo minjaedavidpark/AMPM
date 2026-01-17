@@ -351,7 +351,7 @@ Provide a clear, sourced answer. If the information isn't in the context, say so
         Skips local graph enrichment and uses Backboard's memory-augmented
         RAG directly. Best for simple factual questions.
 
-        Falls back to full query() if Backboard isn't available.
+        Falls back to full query() if Backboard isn't available or errors.
         """
         start_time = time.time()
 
@@ -360,27 +360,35 @@ Provide a clear, sourced answer. If the information isn't in the context, say so
             self.embeddings.backboard_api_key and
             self.embeddings.thread_id):
 
-            answer, memories = self.embeddings.query_with_context(question)
+            try:
+                answer, memories = self.embeddings.query_with_context(question)
 
-            if answer:
-                query_time_ms = (time.time() - start_time) * 1000
-                sources = [
-                    {
-                        "id": m.id,
-                        "content": m.content,
-                        "score": m.score,
-                        "source_type": "backboard_memory"
-                    }
-                    for m in memories
-                ]
-                confidence = min(1.0, len(memories) / 3) if memories else 0.5
+                if answer:
+                    # Check if answer is an error message
+                    if "Error" in answer and ("402" in answer or "credits" in answer.lower()):
+                        print("Backboard API out of credits, falling back to local query...")
+                        return self.query(question)
 
-                return QueryResult(
-                    answer=answer,
-                    sources=sources,
-                    query_time_ms=query_time_ms,
-                    confidence=confidence
-                )
+                    query_time_ms = (time.time() - start_time) * 1000
+                    sources = [
+                        {
+                            "id": m.id,
+                            "content": m.content,
+                            "score": m.score,
+                            "source_type": "backboard_memory"
+                        }
+                        for m in memories
+                    ]
+                    confidence = min(1.0, len(memories) / 3) if memories else 0.5
+
+                    return QueryResult(
+                        answer=answer,
+                        sources=sources,
+                        query_time_ms=query_time_ms,
+                        confidence=confidence
+                    )
+            except Exception as e:
+                print(f"Backboard query failed: {e}, falling back to local query...")
 
         # Fallback to full query
         return self.query(question)
