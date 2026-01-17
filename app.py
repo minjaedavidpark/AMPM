@@ -104,24 +104,29 @@ def get_source_files_hash(data_dir: str) -> str:
     return hasher.hexdigest()
 
 
-def load_or_build_knowledge_graph(data_dir: str = "data/samples", cache_dir: str = ".ampm_cache"):
+def load_or_build_knowledge_graph(data_dir: str = "data/samples", cache_dir: str = ".ampm_cache", use_backboard: bool = True):
     """
     Load knowledge graph from cache or build from source files.
-    
+
+    Args:
+        data_dir: Directory containing meeting JSON files
+        cache_dir: Directory for local cache
+        use_backboard: Whether to use Backboard API for persistent memory
+
     Returns:
         Tuple of (loader, was_cached, error)
     """
     from pathlib import Path
     import json
-    
+
     cache_path = Path(cache_dir)
     graph_cache = cache_path / "graph.json"
     embeddings_cache = cache_path / "embeddings.json"
     metadata_cache = cache_path / "metadata.json"
-    
+
     # Calculate hash of source files
     source_hash = get_source_files_hash(data_dir)
-    
+
     # Check if cache is valid
     cache_valid = False
     if metadata_cache.exists():
@@ -133,17 +138,22 @@ def load_or_build_knowledge_graph(data_dir: str = "data/samples", cache_dir: str
                 print("Cache is valid (source files unchanged)")
         except Exception:
             pass
-    
+
     # Try to load from cache
     if cache_valid and graph_cache.exists() and embeddings_cache.exists():
         print("Loading from cache...")
         try:
             from ampm.core.graph import MeetingGraph
             from ampm.core.embeddings import EmbeddingStore
-            
+
             graph = MeetingGraph()
-            embeddings = EmbeddingStore(use_backboard=False)
-            
+            # Use Backboard for embeddings if available
+            embeddings = EmbeddingStore(
+                use_backboard=use_backboard,
+                config_dir=str(cache_path / "backboard"),
+                persist=True
+            )
+
             if graph.load(str(graph_cache)) and embeddings.load(str(embeddings_cache)):
                 # Create a simple loader wrapper
                 loader = MeetingLoader(graph, embeddings)
@@ -152,80 +162,128 @@ def load_or_build_knowledge_graph(data_dir: str = "data/samples", cache_dir: str
                 print("Cache load failed, rebuilding...")
         except Exception as e:
             print(f"Cache load error: {e}, rebuilding...")
-    
+
     # Build from source
     print("Building knowledge graph from source files...")
-    loader = MeetingLoader()
-    
+
+    from ampm.core.graph import MeetingGraph
+    from ampm.core.embeddings import EmbeddingStore
+
+    graph = MeetingGraph()
+    embeddings = EmbeddingStore(
+        use_backboard=use_backboard,
+        config_dir=str(cache_path / "backboard"),
+        persist=True
+    )
+    loader = MeetingLoader(graph, embeddings)
+
     meetings = loader.load_directory(data_dir)
     if not meetings:
         return None, False, f"No meetings found in {data_dir}"
-    
+
     print(f"Loaded {len(meetings)} meetings")
     print(f"Graph stats: {loader.graph.stats}")
-    
+
     # Save to cache
     try:
         cache_path.mkdir(parents=True, exist_ok=True)
-        
+
         loader.graph.save(str(graph_cache))
         loader.embeddings.save(str(embeddings_cache))
-        
+
         # Save metadata
         with open(metadata_cache, 'w') as f:
             json.dump({
                 "source_hash": source_hash,
                 "data_dir": data_dir,
-                "stats": loader.graph.stats
+                "stats": loader.graph.stats,
+                "use_backboard": use_backboard
             }, f, indent=2)
-        
+
         print("Cache saved successfully")
     except Exception as e:
         print(f"Warning: Could not save cache: {e}")
-    
+
     return loader, False, None
 
 
 @st.cache_resource(show_spinner="Loading meetings and building knowledge graph...")
-def initialize_ampm(data_dir: str = "data/samples"):
+def initialize_ampm(data_dir: str = "data/samples", use_backboard: bool = True):
     """
     Initialize AMPM by loading meetings and building knowledge graph.
-    
+
     This is cached to avoid reprocessing on every page load.
     Uses persistent file cache to avoid rebuilding on app restart.
+
+    Args:
+        data_dir: Directory containing meeting JSON files
+        use_backboard: Whether to use Backboard API for persistent memory
     """
-    # Check for API key
-    if not os.getenv("OPENAI_API_KEY"):
-        return None, None, "Missing OPENAI_API_KEY environment variable"
-    
+    # Check for API keys
+    has_openai = bool(os.getenv("OPENAI_API_KEY"))
+    has_cerebras = bool(os.getenv("CEREBRAS_API_KEY"))
+    has_backboard = bool(os.getenv("BACKBOARD_API_KEY"))
+
+    if not has_openai and not has_cerebras:
+        return None, None, "Missing API keys. Set OPENAI_API_KEY or CEREBRAS_API_KEY in .env"
+
     try:
         # Load or build the knowledge graph
-        loader, was_cached, error = load_or_build_knowledge_graph(data_dir)
-        
+        loader, was_cached, error = load_or_build_knowledge_graph(
+            data_dir,
+            use_backboard=use_backboard and has_backboard
+        )
+
         if error:
             return None, None, error
-        
+
         if was_cached:
             print("Using cached knowledge graph")
         else:
             print("Built new knowledge graph")
-        
+
         # Create query engine
         engine = QueryEngine(loader.graph, loader.embeddings)
-        
+
+        # Store Backboard status in engine for UI access
+        engine._use_backboard = use_backboard and has_backboard
+        engine._has_backboard_thread = bool(
+            loader.embeddings.thread_id if hasattr(loader.embeddings, 'thread_id') else False
+        )
+
         return loader, engine, None
-        
+
     except Exception as e:
         error_msg = f"{type(e).__name__}: {str(e)}\n\n{traceback.format_exc()}"
         print(f"Error: {error_msg}")
         return None, None, error_msg
 
 
-def render_sidebar(loader):
+def render_sidebar(loader, engine=None):
     """Render the sidebar with stats and info."""
     st.sidebar.markdown("## 🕐 AMPM")
     st.sidebar.markdown("*AI Meeting Product Manager*")
-    
+
+    # Show backend status
+    has_backboard = bool(os.getenv("BACKBOARD_API_KEY"))
+    has_cerebras = bool(os.getenv("CEREBRAS_API_KEY"))
+
+    if engine:
+        use_backboard = getattr(engine, '_use_backboard', False)
+        has_thread = getattr(engine, '_has_backboard_thread', False)
+
+        if use_backboard and has_thread:
+            st.sidebar.success("🔗 Backboard Connected (Persistent Memory)")
+        elif has_backboard:
+            st.sidebar.warning("⚠️ Backboard Available (Not Connected)")
+        else:
+            st.sidebar.info("💾 Local Mode (No Persistence)")
+
+        if has_cerebras:
+            st.sidebar.caption("⚡ Using Cerebras for fast LLM")
+
+    st.sidebar.markdown("---")
+
     # Cache control buttons
     col1, col2 = st.sidebar.columns(2)
     with col1:
@@ -243,7 +301,7 @@ def render_sidebar(loader):
                 st.sidebar.success("Cache cleared!")
             st.cache_resource.clear()
             st.rerun()
-    
+
     st.sidebar.markdown("---")
     
     # Stats
@@ -282,17 +340,29 @@ def render_ask_tab(engine: QueryEngine):
     """Render the Ask Questions tab with voice support."""
     st.markdown("### 🔍 Ask a Question")
     st.markdown("Ask about decisions, action items, blockers, or any meeting context.")
-    
-    # Check for ElevenLabs API key
+
+    # Check API keys
     has_elevenlabs = bool(os.getenv("ELEVENLABS_API_KEY"))
-    
-    # Input mode selection
-    input_mode = st.radio(
-        "Input method:",
-        ["⌨️ Type", "🎤 Voice"],
-        horizontal=True,
-        key="input_mode"
-    )
+    use_backboard = getattr(engine, '_use_backboard', False)
+    has_thread = getattr(engine, '_has_backboard_thread', False)
+
+    # Query mode selection
+    col1, col2 = st.columns([2, 1])
+    with col1:
+        input_mode = st.radio(
+            "Input method:",
+            ["⌨️ Type", "🎤 Voice"],
+            horizontal=True,
+            key="input_mode"
+        )
+    with col2:
+        # Fast mode uses Backboard's integrated RAG
+        fast_mode = st.checkbox(
+            "⚡ Fast Mode",
+            value=use_backboard and has_thread,
+            disabled=not (use_backboard and has_thread),
+            help="Use Backboard's memory-augmented RAG for faster responses" if use_backboard else "Enable Backboard to use Fast Mode"
+        )
     
     question = None
     
@@ -355,13 +425,18 @@ def render_ask_tab(engine: QueryEngine):
     
     # Process the question
     if question:
-        with st.spinner("Searching meeting knowledge..."):
+        mode_label = "Backboard RAG" if fast_mode else "Graph + LLM"
+        with st.spinner(f"Searching meeting knowledge ({mode_label})..."):
             start_time = time.time()
-            result = engine.query(question)
+            if fast_mode:
+                result = engine.query_fast(question)
+            else:
+                result = engine.query(question)
             elapsed = time.time() - start_time
-        
-        # Show timing
-        st.markdown(f"<span class='timing-badge'>Answered in {elapsed:.2f}s</span>", unsafe_allow_html=True)
+
+        # Show timing with mode indicator
+        mode_badge = "⚡" if fast_mode else "🔍"
+        st.markdown(f"<span class='timing-badge'>{mode_badge} Answered in {elapsed:.2f}s</span>", unsafe_allow_html=True)
         
         # Show answer
         st.markdown("### Answer")
@@ -958,7 +1033,7 @@ def main():
         return
     
     # Render sidebar
-    render_sidebar(loader)
+    render_sidebar(loader, engine)
     
     # Main content tabs
     tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
