@@ -120,6 +120,12 @@ class QueryEngine:
 
         # Step 3: Generate answer with LLM
         print("Generating answer...")
+        # Debug: Show what we're sending to the LLM
+        if enriched_context:
+            print(f"DEBUG: First context item keys: {list(enriched_context[0].keys())}")
+            ctx0 = enriched_context[0]
+            print(f"DEBUG: decision_content = {ctx0.get('decision_content')}")
+            print(f"DEBUG: meeting_title = {ctx0.get('meeting_title')}")
         answer, confidence = self._generate_answer(question, enriched_context)
         print(f"Answer generated with confidence {confidence}")
 
@@ -299,32 +305,61 @@ Provide a clear, sourced answer. If the information isn't in the context, say so
 
     def _format_context(self, context: list[dict]) -> str:
         """Format context for the LLM prompt."""
+        if not context:
+            return "No context available."
+
         parts = []
 
         for i, ctx in enumerate(context, 1):
-            part = f"--- Source {i} ---\n"
+            lines = [f"--- Source {i} ---"]
 
-            if ctx.get("meeting_title"):
-                part += f"Meeting: {ctx['meeting_title']}"
-                if ctx.get("meeting_date"):
-                    part += f" ({ctx['meeting_date']})"
-                part += "\n"
+            # Debug: print what we're working with
+            print(f"  Formatting source {i}: keys={list(ctx.keys())[:5]}...")
 
-            if ctx.get("decision_content"):
-                part += f"Decision: {ctx['decision_content']}\n"
-                if ctx.get("rationale"):
-                    part += f"Rationale: {ctx['rationale']}\n"
-                if ctx.get("made_by"):
-                    part += f"Made by: {ctx['made_by']}\n"
-                if ctx.get("quote"):
-                    part += f"Quote: \"{ctx['quote']}\"\n"
+            # Add meeting info if available
+            meeting_title = ctx.get("meeting_title")
+            meeting_date = ctx.get("meeting_date")
+            if meeting_title:
+                meeting_line = f"Meeting: {meeting_title}"
+                if meeting_date:
+                    meeting_line += f" ({meeting_date})"
+                lines.append(meeting_line)
 
-            if ctx.get("content") and not ctx.get("decision_content"):
-                part += f"Content: {ctx['content']}\n"
+            # Add decision info if available
+            decision_content = ctx.get("decision_content")
+            if decision_content:
+                lines.append(f"Decision: {decision_content}")
+                rationale = ctx.get("rationale")
+                if rationale:
+                    lines.append(f"Rationale: {rationale}")
+                made_by = ctx.get("made_by")
+                if made_by:
+                    lines.append(f"Made by: {made_by}")
+                quote = ctx.get("quote")
+                if quote:
+                    lines.append(f"Quote: \"{quote}\"")
 
+            # Add content for non-decision items or as fallback
+            content = ctx.get("content")
+            if content and not decision_content:
+                lines.append(f"Content: {content[:500]}")
+
+            # Fallback: if we only have the header, add whatever content we can find
+            if len(lines) == 1:
+                if content:
+                    lines.append(f"Content: {content[:500]}")
+                elif ctx.get("metadata"):
+                    # Try to extract info from metadata
+                    meta = ctx.get("metadata", {})
+                    if meta.get("topic"):
+                        lines.append(f"Topic: {meta.get('topic')}")
+
+            part = "\n".join(lines)
             parts.append(part)
 
-        return "\n".join(parts)
+        formatted = "\n\n".join(parts)
+        print(f"  Formatted {len(parts)} sources, total length: {len(formatted)}")
+        return formatted
 
     # ==================== Convenience Methods ====================
 
