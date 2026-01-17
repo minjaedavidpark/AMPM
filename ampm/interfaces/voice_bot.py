@@ -30,14 +30,14 @@ CHANNELS = 1
 RECORD_SECONDS = 5
 
 # Wake words that activate the bot
-WAKE_WORDS = ["hey ampm", "ampm,", "ampm ", "hey am pm", "hey a]mpm", "hey amp", "a]mpm"]
+WAKE_WORDS = ["hey parrot", "parrot,", "parrot ", "hey par rot", "hey par", "parrot"]
 
 
 class VoiceBot:
     """
     Voice-activated bot for querying meeting memory.
 
-    Say "Hey AMPM" followed by your question.
+    Say "Hey Parrot" followed by your question.
     """
 
     def __init__(self, data_path: Optional[str] = None):
@@ -169,7 +169,7 @@ class VoiceBot:
 
     def _speak(self, text: str) -> Optional[bytes]:
         """Convert text to speech and play it. Returns audio bytes if available."""
-        print(f"\nAMPM: {text}\n")
+        print(f"\nParrot: {text}\n")
         self.is_speaking = True
 
         try:
@@ -239,13 +239,13 @@ class VoiceBot:
     def run(self):
         """Main run loop - record, transcribe, respond."""
         print("\n" + "=" * 50)
-        print("AMPM Voice Bot - Ready!")
+        print("Parrot Voice Bot - Ready!")
         print("=" * 50)
-        print("\nSay 'Hey AMPM' followed by your question.")
+        print("\nSay 'Hey Parrot' followed by your question.")
         print("Examples:")
-        print("  - 'Hey AMPM, why did we choose Stripe?'")
-        print("  - 'AMPM, what happened with Legal approval?'")
-        print("  - 'Hey AMPM, who made the checkout decision?'")
+        print("  - 'Hey Parrot, why did we choose Stripe?'")
+        print("  - 'Parrot, what happened with Legal approval?'")
+        print("  - 'Hey Parrot, who made the checkout decision?'")
         print("\nPress Ctrl+C to stop.")
         print("Press Enter to start recording...\n")
 
@@ -268,7 +268,7 @@ class VoiceBot:
                     response = self._query(question)
                     self._speak(response)
                 else:
-                    print("(No wake word detected. Say 'Hey AMPM' followed by your question)\n")
+                    print("(No wake word detected. Say 'Hey Parrot' followed by your question)\n")
 
         except KeyboardInterrupt:
             print("\n\nGoodbye!")

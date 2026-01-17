@@ -265,7 +265,7 @@ Practice to hit 2:45-3:00, leaving buffer for any delays.
 
 **Setup (Pre-recorded or Live Test):**
 1. Have AMPM "join" a mock meeting (screen share)
-2. Someone asks: "Hey AMPM, why did we choose Stripe?"
+2. Someone asks: "Hey Parrot, why did we choose Stripe?"
 3. Show AMPM responding with audio in <3 seconds
 4. Play the TTS response through speakers
 
@@ -278,7 +278,7 @@ Practice to hit 2:45-3:00, leaving buffer for any delays.
 >
 > *[Play pre-recorded or have teammate ask live]*
 >
-> Teammate: 'Hey AMPM, why did we choose Stripe for payments?'
+> Teammate: 'Hey Parrot, why did we choose Stripe for payments?'
 >
 > *[AMPM responds with audio in ~2 seconds]*
 >

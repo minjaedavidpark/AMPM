@@ -2,7 +2,7 @@
 # AMPM Local Voice Bot - Microphone + speakers
 # Usage: ./scripts/run_voice.sh
 #
-# Say "Hey AMPM" followed by your question
+# Say "Hey Parrot" followed by your question
 
 set -e
 
@@ -41,8 +41,8 @@ if [ -z "$ELEVENLABS_API_KEY" ]; then
     echo "Warning: ELEVENLABS_API_KEY not set - voice responses will be disabled"
 fi
 
-echo "Starting AMPM Local Voice Bot..."
-echo "Say 'Hey AMPM' followed by your question"
+echo "Starting Parrot Voice Bot..."
+echo "Say 'Hey Parrot' followed by your question"
 echo ""
 
 python run.py

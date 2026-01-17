@@ -29,7 +29,7 @@ Run the local voice assistant (microphone + speakers).
 ```
 
 **Features:**
-- Voice-activated queries ("Hey AMPM...")
+- Voice-activated queries ("Hey Parrot...")
 - Spoken responses
 - Local microphone and speaker interaction
 

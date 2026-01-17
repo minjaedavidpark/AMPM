@@ -8,7 +8,7 @@ set -e
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 cd "$SCRIPT_DIR"
 
-echo "🕐 Starting AMPM Voice Bot..."
+echo "🕐 Starting Parrot Voice Bot..."
 echo ""
 
 # Check if virtual environment exists
@@ -37,6 +37,6 @@ fi
 
 # Start voice bot
 echo "🚀 Starting voice bot (microphone + speakers)..."
-echo "   Say 'Hey AMPM' followed by your question"
+echo "   Say 'Hey Parrot' followed by your question"
 echo ""
 python run.py

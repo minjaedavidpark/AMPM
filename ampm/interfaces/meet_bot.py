@@ -538,10 +538,10 @@ class MeetBot:
         print("    1. System Output = Multi-Output Device (with BlackHole)")
         print("    2. Bot's Google Meet → Settings → Microphone = BlackHole 2ch")
         print("\n💡 TIPS:")
-        print("  • Speak clearly: 'Hey AMPM' followed by your question")
+        print("  • Speak clearly: 'Hey Parrot' followed by your question")
         print("  • Wait 4 seconds after bot speaks (prevents echo)")
         print("  • Use headphones to prevent echo")
-        print("\nExample: 'Hey AMPM, why did we choose Stripe?'")
+        print("\nExample: 'Hey Parrot, why did we choose Stripe?'")
         print("\nPress Ctrl+C to leave.\n")
 
     async def _setup_meeting_audio_capture(self):

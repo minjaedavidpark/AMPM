@@ -7,7 +7,7 @@ Run the local voice bot (microphone + speakers).
 Usage:
     python run.py
 
-Say "Hey AMPM" followed by your question.
+Say "Hey Parrot" followed by your question.
 """
 
 import sys
