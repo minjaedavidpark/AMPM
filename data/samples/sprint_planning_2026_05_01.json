@@ -4,5 +4,68 @@
   "date": "2026-05-01",
   "duration_minutes": 60,
   "participants": ["Sarah Chen (VP Product)", "Bob Martinez (Eng Lead)", "Alice Kim (Design)", "Mike Thompson (CTO)"],
+  "decisions": [
+    {
+      "id": "dec_stripe_hosted_checkout",
+      "decision": "Use Stripe hosted checkout instead of building custom checkout",
+      "made_by": "Sarah Chen",
+      "topic": "payments",
+      "reasoning": "PCI compliance out of the box, faster time to market, Stripe handles edge cases"
+    },
+    {
+      "id": "dec_phone_optional",
+      "decision": "Phone number optional at signup, prompted during onboarding after first project",
+      "made_by": "Sarah Chen",
+      "topic": "onboarding",
+      "reasoning": "Reduces signup friction while still collecting phone for lead qualification"
+    },
+    {
+      "id": "dec_react_native_mobile",
+      "decision": "Use React Native for mobile app with native rebuild evaluation at 10,000 users",
+      "made_by": "Sarah Chen",
+      "topic": "mobile",
+      "reasoning": "Faster timeline (2.5 months vs 4 months), team has JavaScript expertise"
+    }
+  ],
+  "action_items": [
+    {
+      "id": "action_legal_meeting",
+      "task": "Set up meeting with Linda in Legal for payments sign-off",
+      "assigned_to": "Bob Martinez",
+      "status": "pending"
+    },
+    {
+      "id": "action_compliance_docs",
+      "task": "Prepare compliance documentation and data flow diagrams for Legal",
+      "assigned_to": "Bob Martinez",
+      "status": "pending"
+    },
+    {
+      "id": "action_onboarding_mockups",
+      "task": "Complete final onboarding mockups and share in Figma by Wednesday",
+      "assigned_to": "Alice Kim",
+      "status": "pending"
+    },
+    {
+      "id": "action_carlos_coordination",
+      "task": "Coordinate with Carlos's manager to loan him for two weeks",
+      "assigned_to": "Mike Thompson",
+      "status": "pending"
+    },
+    {
+      "id": "action_mobile_spec",
+      "task": "Create technical spec for React Native mobile app by Friday",
+      "assigned_to": "Bob Martinez",
+      "status": "pending"
+    }
+  ],
+  "blockers": [
+    {
+      "id": "blocker_legal_approval",
+      "description": "Legal approval needed before payments can go live",
+      "reported_by": "Bob Martinez",
+      "impact": "Blocks payments launch"
+    }
+  ],
   "transcript": "Sarah: Good morning everyone. Let's get Sprint 14 planned out. We've got some big items to tackle this sprint. First up, the payments integration. Bob, where are we with Stripe?\n\nBob: We've completed the basic integration. The webhook handlers are in place, and we're processing test transactions successfully. Main blocker right now is Legal approval - we need their sign-off before we can go live.\n\nSarah: How long do we estimate for Legal?\n\nBob: Based on past experience, probably a week. I'll set up a meeting with Linda in Legal today.\n\nMike: Let's make sure we have all the compliance documentation ready before that meeting. Last time we had to reschedule because we were missing the data flow diagrams.\n\nBob: Good point. I'll prep that this afternoon. Action item for me.\n\nSarah: Perfect. Let's make a formal decision here - we're going with Stripe's hosted checkout page instead of building a custom checkout. Mike, you're aligned on that?\n\nMike: Absolutely. Hosted checkout gives us PCI compliance out of the box, faster time to market, and Stripe handles all the edge cases. We can always build custom later if conversion data suggests we need it.\n\nAlice: From a design perspective, I'm fine with hosted checkout. It limits our customization options, but the trade-off for security and speed makes sense.\n\nSarah: Great, decision made. Stripe hosted checkout it is. Bob, add that to the decision log.\n\nBob: Will do.\n\nSarah: Next item - the user onboarding flow. Alice, you've been working on the redesign?\n\nAlice: Yes, I have three variants ready for A/B testing. The main change is reducing the sign-up form from 8 fields to 3 - just email, password, and company name. We'll collect the rest progressively.\n\nMike: What about the phone number requirement? Sales has been pushing for that.\n\nSarah: I spoke with David from Sales yesterday. They want phone numbers for lead qualification. Here's what I'm proposing - we make phone number optional at signup but prompt for it during the product tour when users see the value.\n\nAlice: That aligns with what I designed. The phone prompt appears after they create their first project.\n\nSarah: Decision made - phone number is optional at signup, prompted during onboarding after first project creation. Alice, can you have the final mockups ready by Wednesday?\n\nAlice: Definitely. I'll share them in Figma by end of day Wednesday.\n\nSarah: Bob, how's the engineering capacity looking for implementing the new onboarding?\n\nBob: We're a bit stretched. The payments work is taking priority, and I've got two engineers out next week for the company offsite. Realistic estimate is we can start onboarding work in Sprint 15.\n\nSarah: That's a blocker for our launch timeline. Mike, any way we can get additional support?\n\nMike: I can loan you Carlos from the infrastructure team for two weeks. He's familiar with our frontend stack.\n\nBob: That would help a lot. With Carlos, we could probably squeeze in the basic onboarding flow this sprint, with the A/B testing framework in Sprint 15.\n\nSarah: Let's do that. Action item: Mike to coordinate with Carlos's manager. Bob, set up an onboarding session for Carlos.\n\nMike: I'll handle it today.\n\nBob: Perfect, I'll have him shadow our standup tomorrow.\n\nSarah: Last topic - the mobile app. We've been going back and forth on this. I want to make a final call today. Do we build native iOS and Android, or do we go with React Native?\n\nMike: From a technical perspective, React Native makes sense for our team size. We've got strong JavaScript expertise, and the performance gap has closed significantly. That said, we lose some native capabilities.\n\nBob: My concern with React Native is the Stripe SDK integration. Their native SDKs are more mature than the React Native wrapper.\n\nAlice: User experience wise, I've seen good and bad React Native apps. It comes down to execution.\n\nSarah: What's the timeline difference?\n\nBob: Native would be roughly 4 months for a basic app on both platforms. React Native, maybe 2.5 months for both.\n\nSarah: Given our runway and the need to validate mobile demand quickly, I'm leaning React Native. We can always rebuild native if the market response justifies it.\n\nMike: I'm supportive. Let's set a review point at 10,000 mobile users - if we hit that and see performance issues, we evaluate native rebuilds.\n\nSarah: Decision made - React Native for mobile, with a native rebuild evaluation trigger at 10,000 users. Bob, can you start scoping the mobile work?\n\nBob: Will do. I'll have a technical spec by Friday.\n\nSarah: Great sprint planning everyone. To summarize our decisions: Stripe hosted checkout, optional phone number with prompted collection, React Native for mobile. Key action items: Bob on Legal meeting and mobile spec, Mike on Carlos coordination, Alice on onboarding mockups. Any blockers besides Legal?\n\nBob: Just the Legal approval. Everything else is unblocked.\n\nSarah: Perfect. Let's ship it. See everyone at standup tomorrow."
 }
