@@ -440,31 +440,38 @@ def render_ask_tab(engine: QueryEngine):
             with st.expander("Sources", expanded=False):
                 for source in result.sources[:3]:
                     meeting_title = source.get('meeting_title', source.get('meeting_id', ''))
-                    meeting_id = source.get('meeting_id', '')
+                    if not meeting_title:
+                        continue
+
+                    # Format date nicely (remove time portion)
                     date = source.get('meeting_date', source.get('date', ''))
-                    content = source.get('content', source.get('decision_content', ''))
+                    if date:
+                        date = str(date).split(' ')[0]  # Remove time portion
+                        if date == 'Unknown date':
+                            date = ''
+
+                    # Get meaningful summary - prefer decision/rationale over raw content
+                    decision = source.get('decision_content', '')
                     rationale = source.get('rationale', '')
+                    content = source.get('content', '')
 
-                    # Build summary from content
+                    # Pick best summary, skip if it's just the meeting title
                     summary = ''
-                    if content:
-                        summary = content[:120] + '...' if len(content) > 120 else content
-                    elif rationale:
-                        summary = rationale[:120] + '...' if len(rationale) > 120 else rationale
+                    for text in [decision, rationale, content]:
+                        if text and text != meeting_title and len(text) > 20:
+                            summary = text[:150].strip()
+                            if len(text) > 150:
+                                summary += '...'
+                            break
 
-                    if meeting_title:
-                        date_str = f" · {date}" if date and date != 'Unknown date' else ""
-                        # Create link to data file
-                        file_link = f"data/samples/{meeting_id}.json" if meeting_id else ""
-                        link_html = f'<a href="file://{os.getcwd()}/{file_link}" target="_blank">View source</a>' if file_link else ''
+                    # Build clean card
+                    date_html = f'<span style="color:#86868b;font-size:0.85rem"> · {date}</span>' if date else ''
+                    summary_html = f'<p style="color:#555;font-size:0.9rem;margin:8px 0 0 0">{summary}</p>' if summary else ''
 
-                        st.markdown(f"""
-                        <div class='source-card'>
-                            <strong>{meeting_title}</strong><small style="color:#86868b">{date_str}</small>
-                            <div class='summary'>{summary}</div>
-                            {link_html}
-                        </div>
-                        """, unsafe_allow_html=True)
+                    st.markdown(
+                        f'<div class="source-card"><strong>{meeting_title}</strong>{date_html}{summary_html}</div>',
+                        unsafe_allow_html=True
+                    )
 
     elif (ask_clicked or speak_response) and not question:
         st.info("Enter a question above.")
