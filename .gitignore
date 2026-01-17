@@ -137,5 +137,6 @@ demo/
 data/meetings/*.json
 !data/meetings/.gitkeep
 
-# AMPM cache
+# AMPM state and cache
+.ampm/
 .ampm_cache/

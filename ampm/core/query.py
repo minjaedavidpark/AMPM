@@ -343,3 +343,44 @@ Provide a clear, sourced answer. If the information isn't in the context, say so
     def status(self, topic: str) -> QueryResult:
         """Shortcut for 'What's the status of X?' queries."""
         return self.query(f"What's the current status of {topic}?")
+
+    def query_fast(self, question: str) -> QueryResult:
+        """
+        Fast query using Backboard's integrated memory + LLM.
+
+        Skips local graph enrichment and uses Backboard's memory-augmented
+        RAG directly. Best for simple factual questions.
+
+        Falls back to full query() if Backboard isn't available.
+        """
+        start_time = time.time()
+
+        # Try Backboard's integrated RAG if available
+        if (self.embeddings.use_backboard and
+            self.embeddings.backboard_api_key and
+            self.embeddings.thread_id):
+
+            answer, memories = self.embeddings.query_with_context(question)
+
+            if answer:
+                query_time_ms = (time.time() - start_time) * 1000
+                sources = [
+                    {
+                        "id": m.id,
+                        "content": m.content,
+                        "score": m.score,
+                        "source_type": "backboard_memory"
+                    }
+                    for m in memories
+                ]
+                confidence = min(1.0, len(memories) / 3) if memories else 0.5
+
+                return QueryResult(
+                    answer=answer,
+                    sources=sources,
+                    query_time_ms=query_time_ms,
+                    confidence=confidence
+                )
+
+        # Fallback to full query
+        return self.query(question)

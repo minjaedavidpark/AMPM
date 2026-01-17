@@ -1,0 +1,42 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ampm"
+version = "0.2.0"
+description = "AI Meeting Product Manager - Contextual memory layer for meetings"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "networkx>=3.0",
+    "python-dotenv>=1.0.0",
+    "requests>=2.31.0",
+    "numpy>=1.26.0",
+    "openai>=1.0.0",
+    "cerebras-cloud-sdk>=1.0.0",
+]
+
+[project.optional-dependencies]
+voice = [
+    "sounddevice>=0.4.6",
+    "pydub>=0.25.0",
+    "elevenlabs>=1.0.0",
+]
+meet = [
+    "playwright>=1.40.0",
+    "sounddevice>=0.4.6",
+    "elevenlabs>=1.0.0",
+    "pydub>=0.25.0",
+]
+all = [
+    "sounddevice>=0.4.6",
+    "pydub>=0.25.0",
+    "elevenlabs>=1.0.0",
+    "playwright>=1.40.0",
+    "websockets>=12.0",
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["ampm*"]

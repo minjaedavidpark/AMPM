@@ -46,8 +46,15 @@ from .ingest import MeetingLoader
 # Agents
 from .agents import MeetingAgent, DecisionAgent, ActionAgent
 
-# Interfaces
-from .interfaces import VoiceBot, MeetBot, DemoMeetBot
+# Interfaces (optional - require sounddevice, elevenlabs, etc.)
+try:
+    from .interfaces import VoiceBot, MeetBot, DemoMeetBot
+    AMPMBot = VoiceBot  # Backward compatibility alias
+except ImportError:
+    VoiceBot = None
+    MeetBot = None
+    DemoMeetBot = None
+    AMPMBot = None
 
 # Models
 from .models import (
@@ -57,7 +64,6 @@ from .models import (
 )
 
 # Backward compatibility aliases
-AMPMBot = VoiceBot
 MeetingKnowledge = MeetingLoader  # Legacy alias
 
 __all__ = [
