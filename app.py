@@ -158,6 +158,13 @@ st.markdown("""
         background: #fafafa;
         border-right: 1px solid #e5e5e7;
     }
+
+    /* Sidebar logo specific */
+    section[data-testid="stSidebar"] img {
+        margin: 0 auto;
+        display: block;
+        margin-bottom: 16px;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -340,8 +347,7 @@ def initialize_ampm(data_dir: str = "data/samples", use_backboard: bool = False)
 
 def render_sidebar(loader, engine=None):
     """Render the sidebar with stats and info."""
-    st.sidebar.markdown("## AMPM")
-    st.sidebar.caption("SDLC Memory")
+    st.sidebar.image("ampm_logo.png", width=60)
 
     st.sidebar.markdown("---")
 
@@ -386,25 +392,26 @@ def render_sidebar(loader, engine=None):
 def render_ask_tab(engine: QueryEngine):
     """Render the Ask Questions tab."""
 
-    # Input row with text field and buttons
-    col_input, col_ask, col_audio = st.columns([8, 1, 1])
+    # Use form for Enter key support
+    with st.form(key="ask_form", clear_on_submit=False):
+        col_input, col_ask, col_audio = st.columns([8, 1, 1])
 
-    with col_input:
-        question = st.text_input(
-            "Ask about your SDLC",
-            placeholder="Why are we using OAuth instead of SAML?",
-            key="question_input",
-            label_visibility="collapsed"
-        )
+        with col_input:
+            question = st.text_input(
+                "Ask about your SDLC",
+                placeholder="Why are we using OAuth instead of SAML?",
+                key="question_input",
+                label_visibility="collapsed"
+            )
 
-    with col_ask:
-        ask_clicked = st.button("Ask", type="primary", use_container_width=True)
+        with col_ask:
+            ask_clicked = st.form_submit_button("Ask", type="primary", use_container_width=True)
 
-    with col_audio:
-        has_elevenlabs = bool(os.getenv("ELEVENLABS_API_KEY"))
-        speak_response = st.button("🔊", disabled=not has_elevenlabs,
-                                   help="Voice response" if has_elevenlabs else "Requires ElevenLabs API key",
-                                   use_container_width=True)
+        with col_audio:
+            has_elevenlabs = bool(os.getenv("ELEVENLABS_API_KEY"))
+            speak_response = st.form_submit_button("🔊", disabled=not has_elevenlabs,
+                                       help="Voice response" if has_elevenlabs else "Requires ElevenLabs API key",
+                                       use_container_width=True)
 
     # Process the question
     if (ask_clicked or speak_response) and question:
@@ -1065,9 +1072,13 @@ def render_ripple_tab(loader, engine):
 
 def main():
     """Main application entry point."""
-    # Header
-    st.markdown("<h1 class='main-header'>AMPM</h1>", unsafe_allow_html=True)
-    st.markdown("<p class='sub-header'>SDLC Memory Layer</p>", unsafe_allow_html=True)
+    # Header with logo and text
+    col1, col2 = st.columns([1, 9])
+    with col1:
+        st.image("ampm_logo.png", width=80)
+    with col2:
+        st.markdown("<h1 class='main-header' style='margin-top: 20px;'>AMPM</h1>", unsafe_allow_html=True)
+        st.markdown("<p class='sub-header'>SDLC Memory Layer</p>", unsafe_allow_html=True)
 
     # Initialize
     loader, engine, error = initialize_ampm()
