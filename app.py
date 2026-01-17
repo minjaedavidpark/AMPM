@@ -159,11 +159,23 @@ st.markdown("""
         border-right: 1px solid #e5e5e7;
     }
 
-    /* Sidebar logo specific */
-    section[data-testid="stSidebar"] img {
-        margin: 0 auto;
-        display: block;
-        margin-bottom: 16px;
+    /* Sidebar logo header */
+    .sidebar-logo {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 12px;
+        padding: 0.5rem 0;
+    }
+    .sidebar-logo img {
+        display: inline-block;
+        margin: 0;
+    }
+    .sidebar-logo span {
+        font-size: 1.4rem;
+        font-weight: 600;
+        color: #333;
+        white-space: nowrap;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -347,7 +359,16 @@ def initialize_ampm(data_dir: str = "data/samples", use_backboard: bool = False)
 
 def render_sidebar(loader, engine=None):
     """Render the sidebar with stats and info."""
-    st.sidebar.image("ampm_logo.png", width=60)
+    import base64
+    with open("ampm_logo.png", "rb") as f:
+        logo_data = base64.b64encode(f.read()).decode()
+    
+    st.sidebar.markdown(f"""
+        <div class="sidebar-logo">
+            <img src="data:image/png;base64,{logo_data}" width="45">
+            <span>AMPM</span>
+        </div>
+    """, unsafe_allow_html=True)
 
     st.sidebar.markdown("---")
 
@@ -1086,13 +1107,20 @@ def render_ripple_tab(loader, engine):
 
 def main():
     """Main application entry point."""
-    # Header with logo and text
-    col1, col2 = st.columns([1, 9])
-    with col1:
-        st.image("ampm_logo.png", width=80)
-    with col2:
-        st.markdown("<h1 class='main-header' style='margin-top: 20px;'>AMPM</h1>", unsafe_allow_html=True)
-        st.markdown("<p class='sub-header'>SDLC Memory Layer</p>", unsafe_allow_html=True)
+    # Header with logo and text - using flexbox for proper alignment
+    import base64
+    with open("ampm_logo.png", "rb") as f:
+        logo_data = base64.b64encode(f.read()).decode()
+    
+    st.markdown(f"""
+        <div style="display: flex; align-items: center; gap: 16px; margin-bottom: 1rem;">
+            <img src="data:image/png;base64,{logo_data}" width="80" style="flex-shrink: 0;">
+            <div>
+                <h1 class='main-header' style='margin: 0; padding: 0;'>AMPM</h1>
+                <p class='sub-header' style='margin: 0; padding: 0;'>SDLC Memory Layer</p>
+            </div>
+        </div>
+    """, unsafe_allow_html=True)
 
     # Initialize
     loader, engine, error = initialize_ampm()
