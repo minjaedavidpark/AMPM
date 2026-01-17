@@ -63,7 +63,12 @@ class RippleDetector:
             graph: The meeting knowledge graph
         """
         self.graph = graph
-        self.cerebras = Cerebras(api_key=os.getenv("CEREBRAS_API_KEY"))
+        self.cerebras = None
+        if os.getenv("CEREBRAS_API_KEY"):
+            try:
+                self.cerebras = Cerebras(api_key=os.getenv("CEREBRAS_API_KEY"))
+            except Exception:
+                pass
 
     def detect(self, decision_id: str, new_value: str,
                old_value: Optional[str] = None) -> RippleReport:
@@ -201,13 +206,25 @@ class RippleDetector:
         if action.status == ActionStatus.COMPLETED:
             return None
 
-        # Quick heuristic check
+        # Quick heuristic check - keyword overlap
         old_keywords = set(old_value.lower().split())
         action_keywords = set(action.task.lower().split())
+        overlap = old_keywords & action_keywords
 
         # If no keyword overlap, likely not impacted
-        if not old_keywords & action_keywords:
+        if not overlap:
             return None
+
+        # If no LLM available, return simple impact based on keyword match
+        if not self.cerebras:
+            return Impact(
+                id=action.id,
+                type="action_item",
+                title=action.task,
+                severity="high" if len(overlap) > 2 else "medium",
+                reason=f"Task contains keywords from changed decision: {', '.join(list(overlap)[:3])}",
+                suggestion="Review and update task based on new decision"
+            )
 
         # Use LLM for detailed analysis
         try:
@@ -274,7 +291,18 @@ If not affected, respond with just: NOT_AFFECTED"""
     def _analyze_decision_impact(self, decision: Decision,
                                  old_value: str, new_value: str) -> Optional[Impact]:
         """Analyze if a related decision conflicts with the change."""
-        # Check for potential contradiction
+        # If no LLM available, return simple impact for related decisions
+        if not self.cerebras:
+            return Impact(
+                id=decision.id,
+                type="decision",
+                title=decision.content[:50] + "..." if len(decision.content) > 50 else decision.content,
+                severity="medium",
+                reason="Related decision in same topic area - review for consistency",
+                suggestion="Verify this decision is still valid with the change"
+            )
+
+        # Check for potential contradiction with LLM
         try:
             response = self.cerebras.chat.completions.create(
                 model="llama-3.3-70b",

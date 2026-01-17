@@ -381,7 +381,7 @@ class EmbeddingStore:
 
     def _get_embedding(self, text: str) -> list[float]:
         """Get embedding for text using OpenAI."""
-        if not LOCAL_AVAILABLE:
+        if not LOCAL_AVAILABLE or not self._openai:
             return []
 
         response = self._openai.embeddings.create(
@@ -401,7 +401,7 @@ class EmbeddingStore:
 
     def add_local(self, doc_id: str, content: str, metadata: dict) -> bool:
         """Add a document to local store."""
-        if not LOCAL_AVAILABLE:
+        if not LOCAL_AVAILABLE or not self._openai:
             return False
 
         embedding = self._get_embedding(content)
