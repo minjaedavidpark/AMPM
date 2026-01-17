@@ -678,6 +678,248 @@ def render_blockers_tab(loader):
         """, unsafe_allow_html=True)
 
 
+def render_add_info_tab(loader):
+    """Render the Add Info tab for real-time knowledge graph updates."""
+    st.markdown("### ➕ Add Information in Real-Time")
+    st.markdown("Add decisions, actions, blockers, or notes during your meeting. Changes are saved automatically.")
+    
+    # Create or get live meeting
+    live_meeting = loader.get_or_create_live_meeting()
+    
+    st.info(f"📍 **Live Session:** {live_meeting.title}")
+    
+    # Sub-tabs for different entry types
+    add_type = st.radio(
+        "What would you like to add?",
+        ["📋 Decision", "✅ Action Item", "🚧 Blocker", "👤 Person", "📝 Note"],
+        horizontal=True
+    )
+    
+    st.markdown("---")
+    
+    # Get existing people for dropdowns
+    people = list(loader.graph._people.values())
+    people_options = ["(none)"] + [p.name for p in people]
+    
+    if add_type == "📋 Decision":
+        st.markdown("#### Record a Decision")
+        
+        decision_content = st.text_area(
+            "Decision:",
+            placeholder="e.g., We will use Stripe for payment processing",
+            key="new_decision"
+        )
+        
+        col1, col2 = st.columns(2)
+        with col1:
+            decision_topic = st.text_input(
+                "Topic:",
+                placeholder="e.g., payments, security, architecture",
+                key="decision_topic"
+            )
+        with col2:
+            made_by = st.selectbox("Made by:", people_options, key="decision_made_by")
+        
+        decision_rationale = st.text_area(
+            "Rationale (optional):",
+            placeholder="Why was this decision made?",
+            key="decision_rationale"
+        )
+        
+        if st.button("➕ Add Decision", type="primary", key="add_decision_btn"):
+            if decision_content:
+                person_id = None
+                if made_by != "(none)":
+                    person_id = made_by.lower().replace(" ", "_")
+                
+                decision = loader.add_decision_realtime(
+                    content=decision_content,
+                    rationale=decision_rationale if decision_rationale else None,
+                    topic=decision_topic if decision_topic else None,
+                    made_by=person_id
+                )
+                st.success(f"✓ Decision added! ID: {decision.id}")
+                st.rerun()
+            else:
+                st.warning("Please enter a decision.")
+    
+    elif add_type == "✅ Action Item":
+        st.markdown("#### Record an Action Item")
+        
+        action_task = st.text_area(
+            "Task:",
+            placeholder="e.g., Create API documentation for the payment integration",
+            key="new_action"
+        )
+        
+        col1, col2 = st.columns(2)
+        with col1:
+            assigned_to = st.selectbox("Assigned to:", people_options, key="action_assigned")
+        with col2:
+            due_date = st.date_input("Due date (optional):", value=None, key="action_due")
+        
+        # Get decisions for linking
+        decisions = list(loader.graph._decisions.values())
+        decision_options = ["(none)"] + [f"{d.content[:50]}..." for d in decisions[-10:]]  # Last 10
+        related_decision = st.selectbox("Related to decision:", decision_options, key="action_decision")
+        
+        if st.button("➕ Add Action Item", type="primary", key="add_action_btn"):
+            if action_task:
+                person_id = None
+                if assigned_to != "(none)":
+                    person_id = assigned_to.lower().replace(" ", "_")
+                
+                decision_id = None
+                if related_decision != "(none)":
+                    idx = decision_options.index(related_decision) - 1
+                    if idx >= 0:
+                        decision_id = decisions[-(10-idx) if len(decisions) > 10 else idx].id
+                
+                from datetime import datetime
+                due_dt = datetime.combine(due_date, datetime.min.time()) if due_date else None
+                
+                action = loader.add_action_realtime(
+                    task=action_task,
+                    assigned_to=person_id,
+                    due_date=due_dt,
+                    decision_id=decision_id
+                )
+                st.success(f"✓ Action item added! ID: {action.id}")
+                st.rerun()
+            else:
+                st.warning("Please enter a task description.")
+    
+    elif add_type == "🚧 Blocker":
+        st.markdown("#### Report a Blocker")
+        
+        blocker_desc = st.text_area(
+            "Blocker description:",
+            placeholder="e.g., Waiting for security team approval on the API design",
+            key="new_blocker"
+        )
+        
+        col1, col2 = st.columns(2)
+        with col1:
+            reported_by = st.selectbox("Reported by:", people_options, key="blocker_reporter")
+        
+        blocker_impact = st.text_input(
+            "Impact (optional):",
+            placeholder="e.g., Blocks payment feature launch",
+            key="blocker_impact"
+        )
+        
+        if st.button("➕ Add Blocker", type="primary", key="add_blocker_btn"):
+            if blocker_desc:
+                person_id = None
+                if reported_by != "(none)":
+                    person_id = reported_by.lower().replace(" ", "_")
+                
+                blocker = loader.add_blocker_realtime(
+                    description=blocker_desc,
+                    reported_by=person_id,
+                    impact=blocker_impact if blocker_impact else None
+                )
+                st.success(f"✓ Blocker added! ID: {blocker.id}")
+                st.rerun()
+            else:
+                st.warning("Please describe the blocker.")
+    
+    elif add_type == "👤 Person":
+        st.markdown("#### Add a Team Member")
+        
+        person_name = st.text_input(
+            "Name:",
+            placeholder="e.g., Sarah Chen",
+            key="new_person_name"
+        )
+        
+        col1, col2 = st.columns(2)
+        with col1:
+            person_role = st.text_input(
+                "Role:",
+                placeholder="e.g., Engineering Manager",
+                key="person_role"
+            )
+        with col2:
+            person_email = st.text_input(
+                "Email (optional):",
+                placeholder="e.g., sarah@company.com",
+                key="person_email"
+            )
+        
+        if st.button("➕ Add Person", type="primary", key="add_person_btn"):
+            if person_name:
+                person = loader.add_person_realtime(
+                    name=person_name,
+                    role=person_role if person_role else None,
+                    email=person_email if person_email else None
+                )
+                st.success(f"✓ Person added: {person.name}")
+                st.rerun()
+            else:
+                st.warning("Please enter a name.")
+    
+    elif add_type == "📝 Note":
+        st.markdown("#### Add a Note")
+        
+        note_content = st.text_area(
+            "Note:",
+            placeholder="Any observation, insight, or discussion point...",
+            key="new_note"
+        )
+        
+        note_category = st.selectbox(
+            "Category:",
+            ["note", "insight", "question", "followup", "context"],
+            key="note_category"
+        )
+        
+        if st.button("➕ Add Note", type="primary", key="add_note_btn"):
+            if note_content:
+                note_id = loader.add_note_realtime(
+                    content=note_content,
+                    category=note_category
+                )
+                st.success(f"✓ Note added! ID: {note_id}")
+                st.rerun()
+            else:
+                st.warning("Please enter a note.")
+    
+    # Show recent additions
+    st.markdown("---")
+    st.markdown("#### 📊 Live Session Summary")
+    
+    col1, col2, col3 = st.columns(3)
+    
+    # Count items from live meeting
+    live_decisions = [d for d in loader.graph._decisions.values() if d.meeting_id == "live_meeting"]
+    live_actions = [a for a in loader.graph._action_items.values() if a.meeting_id == "live_meeting"]
+    live_blockers = [b for b in loader.graph._blockers.values() if b.meeting_id == "live_meeting"]
+    
+    with col1:
+        st.metric("Decisions", len(live_decisions))
+    with col2:
+        st.metric("Action Items", len(live_actions))
+    with col3:
+        st.metric("Blockers", len(live_blockers))
+    
+    # Show recent items
+    if live_decisions or live_actions or live_blockers:
+        with st.expander("View items added this session"):
+            if live_decisions:
+                st.markdown("**Decisions:**")
+                for d in live_decisions[-5:]:
+                    st.markdown(f"- {d.content}")
+            if live_actions:
+                st.markdown("**Actions:**")
+                for a in live_actions[-5:]:
+                    st.markdown(f"- {a.task}")
+            if live_blockers:
+                st.markdown("**Blockers:**")
+                for b in live_blockers[-5:]:
+                    st.markdown(f"- {b.description}")
+
+
 def main():
     """Main application entry point."""
     # Header
@@ -719,8 +961,9 @@ def main():
     render_sidebar(loader)
     
     # Main content tabs
-    tab1, tab2, tab3, tab4, tab5 = st.tabs([
+    tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
         "🔍 Ask Questions",
+        "➕ Add Info",
         "📋 Decision Ledger", 
         "✅ Action Items",
         "📅 Meeting History",
@@ -731,15 +974,18 @@ def main():
         render_ask_tab(engine)
     
     with tab2:
-        render_decisions_tab(loader)
+        render_add_info_tab(loader)
     
     with tab3:
-        render_actions_tab(loader)
+        render_decisions_tab(loader)
     
     with tab4:
-        render_meetings_tab(loader)
+        render_actions_tab(loader)
     
     with tab5:
+        render_meetings_tab(loader)
+    
+    with tab6:
         render_blockers_tab(loader)
     
     # Footer

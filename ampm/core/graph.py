@@ -137,6 +137,32 @@ class MeetingGraph:
             data=topic
         )
 
+    def add_blocker(self, blocker: Blocker) -> None:
+        """Add a blocker to the graph."""
+        self._blockers[blocker.id] = blocker
+        self.graph.add_node(
+            blocker.id,
+            type="blocker",
+            description=blocker.description,
+            data=blocker
+        )
+
+        # Link to meeting
+        if blocker.meeting_id:
+            self.graph.add_edge(
+                blocker.meeting_id,
+                blocker.id,
+                relation=RelationType.CONTAINS_BLOCKER.value
+            )
+
+        # Link to person who reported it
+        if blocker.reported_by:
+            self.graph.add_edge(
+                blocker.id,
+                blocker.reported_by,
+                relation=RelationType.REPORTED_BY.value
+            )
+
     # ==================== Query Methods ====================
 
     def get_meeting(self, meeting_id: str) -> Optional[Meeting]:

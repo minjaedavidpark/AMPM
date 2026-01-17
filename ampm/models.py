@@ -224,6 +224,9 @@ class RelationType(Enum):
     FOLLOWS_FROM = "follows_from"
     BLOCKED_BY = "blocked_by"
 
+    # Blocker relationships
+    REPORTED_BY = "reported_by"
+
     # Cross-meeting relationships
     RELATED_TO = "related_to"
     REFERENCES = "references"
